@@ -327,16 +327,30 @@ function showComplete(reg, ev) {
     </div>
   `;
 
-  // QR 생성
-  QRCode.toCanvas(document.getElementById('qr-canvas'), reg.qr_code, { width: 180, margin: 2, color: { dark: '#1a1917', light: '#ffffff' } });
+  // QR 생성 — DOM 렌더링 완료 후 실행
+  setTimeout(() => {
+    const canvas = document.getElementById('qr-canvas');
+    if (!canvas) return;
+    QRCode.toDataURL(reg.qr_code, { width: 180, margin: 2, color: { dark: '#1a1917', light: '#ffffff' } }, (err, url) => {
+      if (err) return;
+      const img = document.createElement('img');
+      img.src = url;
+      img.style.cssText = 'display:block;width:180px;height:180px;border-radius:4px';
+      const c = document.getElementById('qr-canvas');
+      if (c) c.parentNode.replaceChild(img, c);
+    });
+  }, 80);
 }
 
 function saveQR() {
+  // img 또는 canvas 둘 다 처리
+  const img = document.querySelector('.qr-container img');
   const canvas = document.getElementById('qr-canvas');
-  if (!canvas) return;
+  const src = img ? img.src : (canvas ? canvas.toDataURL() : null);
+  if (!src) return;
   const a = document.createElement('a');
   a.download = 'planbag-qr.png';
-  a.href = canvas.toDataURL();
+  a.href = src;
   a.click();
 }
 
