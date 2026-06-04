@@ -155,6 +155,7 @@ tbody tr:hover td { background: var(--surface2); }
   <div class="table-card">
     <div class="table-toolbar">
       <h3>참가자 명단</h3>
+      <button class="btn" onclick="copyAllQRLinks()" title="현재 필터된 참가자 전체 QR링크를 탭으로 구분해서 복사">📋 QR링크 전체복사</button>
       <input type="text" id="search-input" placeholder="이름·이메일·소속 검색" oninput="renderTable()" style="width:200px">
       <select id="filter-status" onchange="renderTable()">
         <option value="">전체 상태</option>
@@ -281,7 +282,8 @@ function renderTable() {
         </td>
         <td style="color:var(--muted)">${createdAt}</td>
         <td>
-          <div style="display:flex;gap:4px">
+          <div style="display:flex;gap:4px;flex-wrap:wrap">
+            <button class="action-btn" onclick="copyConfirmLink('${r.id}')" title="QR 확인 링크 복사">🔗 QR링크</button>
             ${r.status === 'pending' ? `<button class="action-btn success" onclick="approveReg('${r.id}')">승인</button>` : ''}
             ${r.status === 'confirmed' && !r.checked_in ? `<button class="action-btn success" onclick="manualCheckin('${r.id}')">체크인</button>` : ''}
             ${r.status !== 'cancelled' ? `<button class="action-btn danger" onclick="cancelReg('${r.id}')">취소</button>` : ''}
@@ -337,6 +339,28 @@ function renderCharts() {
     },
     options: { plugins: { legend: { position: 'bottom', labels: { font: { size: 11 }, boxWidth: 12 } } }, cutout: '65%' }
   });
+}
+
+// ── QR 링크 복사 ──
+function getConfirmLink(regId) {
+  const base = window.location.href.replace('dashboard.html', '').split('?')[0];
+  return `${base}confirm.html?id=${regId}`;
+}
+
+function copyConfirmLink(regId) {
+  const url = getConfirmLink(regId);
+  navigator.clipboard.writeText(url).then(() => toast('QR 확인 링크 복사됨!', 'success'));
+}
+
+function copyAllQRLinks() {
+  const filtered = getFiltered().filter(r => r.status === 'confirmed');
+  if (!filtered.length) { toast('확정 참가자가 없습니다', 'error'); return; }
+  const lines = filtered.map(r =>
+    `${r.name}\t${r.organization || ''}\t${r.email}\t${getConfirmLink(r.id)}`
+  ).join('\n');
+  navigator.clipboard.writeText(lines).then(() =>
+    toast(`${filtered.length}명 QR링크 복사됨 (탭 구분, 엑셀에 붙여넣기 가능)`, 'success')
+  );
 }
 
 // ── 참가자 관리 ──
