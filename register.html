@@ -302,7 +302,7 @@ function showComplete(reg, ev) {
         <p>${statusMsg}</p>
 
         <div class="qr-container" id="qr-container">
-          <img id="qr-img" src="https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(reg.qr_code)}&margin=10&color=1a1917" width="180" height="180" style="border-radius:4px;display:block" alt="QR코드">
+          <img id="qr-img" src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(reg.qr_code)}" width="180" height="180" style="border-radius:4px;display:block" alt="QR코드">
           <div class="qr-label">입장 QR코드 · ${reg.qr_code}</div>
         </div>
 

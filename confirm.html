@@ -206,7 +206,7 @@ function renderConfirm(reg, ev) {
   // QR 생성 — 외부 API 방식
   const qrImg = document.getElementById('qr-img');
   if (qrImg) {
-    qrImg.src = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(reg.qr_code)}&margin=10&color=1a1917`;
+    qrImg.src = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(reg.qr_code)}`;
   }
 }
 
