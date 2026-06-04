@@ -1,0 +1,599 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Planbag 행사 관리</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+:root {
+  --bg: #f4f3ef;
+  --surface: #ffffff;
+  --surface2: #f9f8f5;
+  --border: #e5e3dc;
+  --text: #1a1917;
+  --muted: #7a7870;
+  --accent: #2563eb;
+  --accent-light: #eff6ff;
+  --danger: #dc2626;
+  --success: #16a34a;
+  --warning: #d97706;
+  --radius: 10px;
+  --shadow: 0 1px 3px rgba(0,0,0,.08), 0 1px 2px rgba(0,0,0,.05);
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Pretendard', 'Apple SD Gothic Neo', sans-serif; background: var(--bg); color: var(--text); font-size: 14px; line-height: 1.6; }
+a { color: inherit; text-decoration: none; }
+
+/* 레이아웃 */
+.app { display: flex; min-height: 100vh; }
+.sidebar { width: 220px; background: var(--text); color: #fff; padding: 0; flex-shrink: 0; display: flex; flex-direction: column; }
+.sidebar-logo { padding: 22px 20px 18px; border-bottom: 1px solid rgba(255,255,255,.1); }
+.sidebar-logo .brand { font-size: 16px; font-weight: 700; letter-spacing: -.3px; }
+.sidebar-logo .sub { font-size: 11px; color: rgba(255,255,255,.45); margin-top: 2px; }
+.sidebar-nav { flex: 1; padding: 12px 10px; }
+.nav-item { display: flex; align-items: center; gap: 9px; padding: 9px 12px; border-radius: 7px; font-size: 13px; color: rgba(255,255,255,.7); cursor: pointer; transition: all .15s; margin-bottom: 2px; }
+.nav-item:hover, .nav-item.active { background: rgba(255,255,255,.12); color: #fff; }
+.nav-item svg { width: 16px; height: 16px; flex-shrink: 0; }
+.sidebar-bottom { padding: 16px 20px; border-top: 1px solid rgba(255,255,255,.1); font-size: 11px; color: rgba(255,255,255,.35); }
+
+.main { flex: 1; overflow-y: auto; }
+.topbar { background: var(--surface); border-bottom: 1px solid var(--border); padding: 0 28px; height: 56px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 10; }
+.topbar-title { font-size: 15px; font-weight: 600; }
+.content { padding: 28px; max-width: 1100px; }
+
+/* 버튼 */
+.btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 500; cursor: pointer; border: none; transition: all .15s; }
+.btn-primary { background: var(--accent); color: #fff; }
+.btn-primary:hover { background: #1d4ed8; }
+.btn-secondary { background: var(--surface); border: 1px solid var(--border); color: var(--text); }
+.btn-secondary:hover { background: var(--surface2); }
+.btn-danger { background: #fef2f2; border: 1px solid #fca5a5; color: var(--danger); }
+.btn-sm { padding: 5px 10px; font-size: 12px; border-radius: 6px; }
+.btn svg { width: 15px; height: 15px; }
+
+/* 행사 카드 그리드 */
+.events-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; margin-top: 20px; }
+.event-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow); transition: all .2s; cursor: pointer; }
+.event-card:hover { box-shadow: 0 4px 12px rgba(0,0,0,.1); transform: translateY(-1px); }
+.event-card-cover { height: 6px; background: var(--accent); }
+.event-card-body { padding: 18px; }
+.event-card-status { display: inline-block; font-size: 11px; font-weight: 500; padding: 2px 8px; border-radius: 20px; margin-bottom: 10px; }
+.status-open { background: #dcfce7; color: #166534; }
+.status-draft { background: #f3f4f6; color: #6b7280; }
+.status-closed { background: #fef3c7; color: #92400e; }
+.status-ended { background: #f3f4f6; color: #9ca3af; }
+.event-card-title { font-size: 15px; font-weight: 600; margin-bottom: 6px; line-height: 1.4; }
+.event-card-meta { font-size: 12px; color: var(--muted); line-height: 1.7; }
+.event-card-footer { padding: 12px 18px; border-top: 1px solid var(--border); background: var(--surface2); display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.event-stat { text-align: center; }
+.event-stat-n { font-size: 18px; font-weight: 700; }
+.event-stat-l { font-size: 10px; color: var(--muted); }
+.event-actions { display: flex; gap: 6px; }
+
+/* 빈 상태 */
+.empty-state { text-align: center; padding: 60px 20px; color: var(--muted); }
+.empty-state svg { width: 48px; height: 48px; margin: 0 auto 16px; opacity: .3; }
+.empty-state h3 { font-size: 16px; font-weight: 600; color: var(--text); margin-bottom: 8px; }
+
+/* 모달 */
+.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 100; display: none; align-items: center; justify-content: center; padding: 20px; }
+.modal-overlay.show { display: flex; }
+.modal { background: var(--surface); border-radius: 14px; width: 100%; max-width: 620px; max-height: 90vh; overflow-y: auto; box-shadow: 0 20px 60px rgba(0,0,0,.2); }
+.modal-header { padding: 22px 24px 0; display: flex; align-items: center; justify-content: space-between; }
+.modal-header h2 { font-size: 17px; font-weight: 700; }
+.modal-close { width: 32px; height: 32px; border-radius: 6px; border: none; background: var(--surface2); cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 18px; color: var(--muted); }
+.modal-close:hover { background: var(--border); }
+.modal-body { padding: 20px 24px 24px; }
+
+/* 폼 */
+.form-row { margin-bottom: 16px; }
+.form-row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+label { display: block; font-size: 12px; font-weight: 600; color: var(--muted); margin-bottom: 5px; text-transform: uppercase; letter-spacing: .4px; }
+input, select, textarea { width: 100%; padding: 9px 12px; border: 1px solid var(--border); border-radius: 8px; font-size: 13px; background: var(--surface); color: var(--text); transition: border-color .15s; font-family: inherit; }
+input:focus, select:focus, textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(37,99,235,.1); }
+textarea { resize: vertical; min-height: 80px; }
+.form-footer { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border); }
+
+/* 색상 선택 */
+.color-options { display: flex; gap: 8px; flex-wrap: wrap; }
+.color-opt { width: 28px; height: 28px; border-radius: 50%; cursor: pointer; border: 3px solid transparent; transition: all .15s; }
+.color-opt.selected { border-color: var(--text); transform: scale(1.1); }
+
+/* 커스텀 필드 */
+.custom-fields-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
+.custom-field-item { display: flex; align-items: center; gap: 8px; background: var(--surface2); border: 1px solid var(--border); border-radius: 7px; padding: 8px 10px; font-size: 12px; }
+.custom-field-item .cf-label { flex: 1; font-weight: 500; }
+.custom-field-item .cf-type { color: var(--muted); font-size: 11px; background: var(--border); padding: 1px 6px; border-radius: 4px; }
+.custom-field-item .cf-req { color: var(--danger); font-size: 10px; }
+.cf-remove { width: 20px; height: 20px; border-radius: 4px; border: none; background: none; cursor: pointer; color: var(--muted); font-size: 14px; display: flex; align-items: center; justify-content: center; }
+.cf-remove:hover { background: #fef2f2; color: var(--danger); }
+
+/* 토스트 */
+.pb-toast { position: fixed; bottom: 24px; right: 24px; padding: 12px 18px; border-radius: 9px; font-size: 13px; font-weight: 500; z-index: 9999; transform: translateY(10px); opacity: 0; transition: all .25s; box-shadow: 0 4px 16px rgba(0,0,0,.15); max-width: 320px; }
+.pb-toast.show { transform: translateY(0); opacity: 1; }
+.pb-toast--info { background: var(--text); color: #fff; }
+.pb-toast--success { background: var(--success); color: #fff; }
+.pb-toast--error { background: var(--danger); color: #fff; }
+
+/* 링크 메뉴 */
+.link-menu { position: absolute; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 8px 24px rgba(0,0,0,.12); padding: 6px; z-index: 200; min-width: 200px; display: none; }
+.link-menu.show { display: block; }
+.link-menu-item { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 6px; font-size: 12px; cursor: pointer; color: var(--text); transition: background .1s; }
+.link-menu-item:hover { background: var(--surface2); }
+.link-menu-item svg { width: 14px; height: 14px; color: var(--muted); }
+.link-menu-sep { height: 1px; background: var(--border); margin: 4px 0; }
+
+/* 배지 */
+.badge { display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: 20px; font-size: 11px; font-weight: 500; }
+
+/* 섹션 타이틀 */
+.section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
+.section-header h2 { font-size: 16px; font-weight: 700; }
+.section-sub { font-size: 12px; color: var(--muted); margin-bottom: 0; }
+
+/* 통계 바 */
+.stats-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 28px; }
+.stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 18px; }
+.stat-card-n { font-size: 26px; font-weight: 700; }
+.stat-card-l { font-size: 12px; color: var(--muted); margin-top: 2px; }
+
+@media (max-width: 768px) {
+  .sidebar { display: none; }
+  .stats-row { grid-template-columns: repeat(2, 1fr); }
+  .events-grid { grid-template-columns: 1fr; }
+  .form-row-2 { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+<div class="app">
+
+<!-- 사이드바 -->
+<aside class="sidebar">
+  <div class="sidebar-logo">
+    <div class="brand">Planbag</div>
+    <div class="sub">행사 관리 시스템</div>
+  </div>
+  <nav class="sidebar-nav">
+    <div class="nav-item active" onclick="showTab('events')">
+      <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+      행사 목록
+    </div>
+    <div class="nav-item" onclick="showTab('settings')">
+      <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+      시스템 설정
+    </div>
+  </nav>
+  <div class="sidebar-bottom">planbag.co.kr</div>
+</aside>
+
+<!-- 메인 -->
+<div class="main">
+  <div class="topbar">
+    <div class="topbar-title" id="tab-title">행사 목록</div>
+    <button class="btn btn-primary" onclick="openCreateModal()">
+      <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" style="width:15px;height:15px"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+      새 행사 만들기
+    </button>
+  </div>
+
+  <div class="content">
+    <!-- 전체 통계 -->
+    <div class="stats-row" id="stats-row">
+      <div class="stat-card"><div class="stat-card-n" id="total-events">—</div><div class="stat-card-l">전체 행사</div></div>
+      <div class="stat-card"><div class="stat-card-n" id="open-events">—</div><div class="stat-card-l">진행중 행사</div></div>
+      <div class="stat-card"><div class="stat-card-n" id="total-reg">—</div><div class="stat-card-l">총 등록자</div></div>
+      <div class="stat-card"><div class="stat-card-n" id="total-checkin">—</div><div class="stat-card-l">오늘 체크인</div></div>
+    </div>
+
+    <!-- 행사 목록 -->
+    <div class="section-header">
+      <h2>행사 목록</h2>
+      <div style="display:flex;gap:8px;align-items:center">
+        <select id="filter-status" onchange="renderEvents()" style="width:auto;padding:6px 10px;font-size:12px">
+          <option value="">전체 상태</option>
+          <option value="open">진행중</option>
+          <option value="draft">초안</option>
+          <option value="closed">마감</option>
+          <option value="ended">종료</option>
+        </select>
+      </div>
+    </div>
+    <div class="section-sub" id="events-count" style="margin-bottom:12px"></div>
+    <div class="events-grid" id="events-grid">
+      <div class="empty-state" id="loading-state">
+        <p style="color:var(--muted)">행사 목록을 불러오는 중...</p>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+
+<!-- 행사 생성/편집 모달 -->
+<div class="modal-overlay" id="event-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <h2 id="modal-title">새 행사 만들기</h2>
+      <button class="modal-close" onclick="closeModal()">×</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="edit-id">
+
+      <div class="form-row">
+        <label>행사명 *</label>
+        <input type="text" id="f-title" placeholder="예: 2025 플랜백 컨퍼런스">
+      </div>
+      <div class="form-row">
+        <label>부제목</label>
+        <input type="text" id="f-subtitle" placeholder="예: 미래를 설계하는 이벤트 기획자들의 모임">
+      </div>
+      <div class="form-row-2">
+        <div class="form-row" style="margin-bottom:0">
+          <label>시작일시 *</label>
+          <input type="datetime-local" id="f-date-start">
+        </div>
+        <div class="form-row" style="margin-bottom:0">
+          <label>종료일시</label>
+          <input type="datetime-local" id="f-date-end">
+        </div>
+      </div>
+      <div class="form-row">
+        <label>행사 장소명</label>
+        <input type="text" id="f-location-name" placeholder="예: 코엑스 그랜드볼룸">
+      </div>
+      <div class="form-row">
+        <label>상세 주소</label>
+        <input type="text" id="f-location-addr" placeholder="예: 서울 강남구 영동대로 513">
+      </div>
+      <div class="form-row">
+        <label>행사 설명</label>
+        <textarea id="f-description" placeholder="행사 소개, 프로그램 안내 등"></textarea>
+      </div>
+      <div class="form-row-2">
+        <div class="form-row" style="margin-bottom:0">
+          <label>최대 인원</label>
+          <input type="number" id="f-capacity" placeholder="제한 없음">
+        </div>
+        <div class="form-row" style="margin-bottom:0">
+          <label>상태</label>
+          <select id="f-status">
+            <option value="draft">초안 (비공개)</option>
+            <option value="open">접수 중</option>
+            <option value="closed">접수 마감</option>
+            <option value="ended">종료</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-row">
+        <label>명찰 승인 방식</label>
+        <select id="f-approval">
+          <option value="false">자동 확정 (신청 즉시 확정)</option>
+          <option value="true">수동 승인 (관리자 승인 필요)</option>
+        </select>
+      </div>
+      <div class="form-row">
+        <label>테마 색상</label>
+        <div class="color-options" id="color-options">
+          <div class="color-opt selected" data-color="#1a1a2e" style="background:#1a1a2e" onclick="selectColor(this)"></div>
+          <div class="color-opt" data-color="#2563eb" style="background:#2563eb" onclick="selectColor(this)"></div>
+          <div class="color-opt" data-color="#0f766e" style="background:#0f766e" onclick="selectColor(this)"></div>
+          <div class="color-opt" data-color="#7c3aed" style="background:#7c3aed" onclick="selectColor(this)"></div>
+          <div class="color-opt" data-color="#dc2626" style="background:#dc2626" onclick="selectColor(this)"></div>
+          <div class="color-opt" data-color="#d97706" style="background:#d97706" onclick="selectColor(this)"></div>
+          <div class="color-opt" data-color="#0369a1" style="background:#0369a1" onclick="selectColor(this)"></div>
+          <div class="color-opt" data-color="#be185d" style="background:#be185d" onclick="selectColor(this)"></div>
+        </div>
+      </div>
+
+      <!-- 추가 수집 항목 -->
+      <div class="form-row">
+        <label>추가 수집 항목 <span style="font-size:10px;color:var(--muted);text-transform:none">(기본: 이름·이메일·전화번호·소속·부서·직함)</span></label>
+        <div class="custom-fields-list" id="custom-fields-list"></div>
+        <div style="display:flex;gap:8px;align-items:flex-end">
+          <div style="flex:1">
+            <input type="text" id="cf-label" placeholder="항목 이름 (예: 식사 선택)">
+          </div>
+          <select id="cf-type" style="width:110px">
+            <option value="text">텍스트</option>
+            <option value="select">선택</option>
+            <option value="checkbox">체크박스</option>
+          </select>
+          <label style="display:flex;align-items:center;gap:4px;font-size:12px;text-transform:none;color:var(--text);white-space:nowrap;margin-bottom:0">
+            <input type="checkbox" id="cf-required" style="width:auto"> 필수
+          </label>
+          <button class="btn btn-secondary btn-sm" onclick="addCustomField()">추가</button>
+        </div>
+      </div>
+
+      <div class="form-footer">
+        <button class="btn btn-secondary" onclick="closeModal()">취소</button>
+        <button class="btn btn-primary" onclick="saveEvent()">저장</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 링크 메뉴 (링크 복사 드롭다운) -->
+<div class="link-menu" id="link-menu">
+  <div class="link-menu-item" onclick="copyLink('register')">
+    <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+    등록 페이지 링크 복사
+  </div>
+  <div class="link-menu-item" onclick="openLink('register')">
+    <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+    등록 페이지 열기
+  </div>
+  <div class="link-menu-sep"></div>
+  <div class="link-menu-item" onclick="openLink('checkin')">
+    <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+    QR 체크인 화면 열기
+  </div>
+  <div class="link-menu-item" onclick="openLink('nametag')">
+    <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-5m-4 0V5a2 2 0 114 0v1m-4 0a2 2 0 104 0m-5 8a2 2 0 100-4 2 2 0 000 4zm0 0c1.306 0 2.417.835 2.83 2M9 14a3.001 3.001 0 00-2.83 2"/></svg>
+    명찰 출력 화면 열기
+  </div>
+  <div class="link-menu-sep"></div>
+  <div class="link-menu-item" onclick="openLink('dashboard')">
+    <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+    참가자 대시보드 열기
+  </div>
+</div>
+
+<script>
+const SUPABASE_URL = 'https://ibeaiiizgqtlzkeqlsdg.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImliZWFpaWl6Z3F0bHprZXFsc2RnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA1NTk2OTYsImV4cCI6MjA5NjEzNTY5Nn0.KU4eYmhpS0dduvtxRRZuPbsEu1PrFgYVK-GGzDfTqvc';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+let allEvents = [];
+let customFields = [];
+let linkMenuTarget = null;
+let selectedColor = '#1a1a2e';
+
+// ── 초기 로드 ──
+async function init() {
+  await loadEvents();
+  await loadStats();
+}
+
+async function loadEvents() {
+  const { data, error } = await sb.from('events').select('*, registrations(count)').order('created_at', { ascending: false });
+  if (error) { toast('행사 목록 로드 실패', 'error'); return; }
+  allEvents = (data || []).map(e => ({
+    ...e,
+    reg_count: e.registrations?.[0]?.count ?? 0
+  }));
+  renderEvents();
+}
+
+async function loadStats() {
+  const today = new Date(); today.setHours(0,0,0,0);
+  const { count: totalReg } = await sb.from('registrations').select('*', { count: 'exact', head: true }).eq('status','confirmed');
+  const { count: todayCheckin } = await sb.from('checkin_logs').select('*', { count: 'exact', head: true }).gte('created_at', today.toISOString());
+  document.getElementById('total-events').textContent = allEvents.length;
+  document.getElementById('open-events').textContent = allEvents.filter(e => e.status === 'open').length;
+  document.getElementById('total-reg').textContent = totalReg ?? 0;
+  document.getElementById('total-checkin').textContent = todayCheckin ?? 0;
+}
+
+function renderEvents() {
+  const filter = document.getElementById('filter-status').value;
+  const filtered = filter ? allEvents.filter(e => e.status === filter) : allEvents;
+  document.getElementById('events-count').textContent = `총 ${filtered.length}개 행사`;
+  const grid = document.getElementById('events-grid');
+  if (!filtered.length) {
+    grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1">
+      <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+      <h3>${filter ? '해당 상태의 행사가 없습니다' : '아직 행사가 없습니다'}</h3>
+      <p style="font-size:13px;margin-top:4px">우측 상단 '새 행사 만들기' 버튼으로 첫 행사를 만들어보세요.</p>
+    </div>`;
+    return;
+  }
+  const statusLabel = { open:'접수 중', draft:'초안', closed:'마감', ended:'종료' };
+  const statusClass = { open:'status-open', draft:'status-draft', closed:'status-closed', ended:'status-ended' };
+  grid.innerHTML = filtered.map(e => `
+    <div class="event-card" id="card-${e.id}">
+      <div class="event-card-cover" style="background:${e.color_primary}"></div>
+      <div class="event-card-body">
+        <div class="event-card-status ${statusClass[e.status]}">${statusLabel[e.status]}</div>
+        <div class="event-card-title">${e.title}</div>
+        <div class="event-card-meta">
+          📅 ${formatDate(e.date_start)}<br>
+          ${e.location_name ? '📍 ' + e.location_name : ''}
+          ${e.max_capacity ? '<br>👥 최대 ' + e.max_capacity + '명' : ''}
+        </div>
+      </div>
+      <div class="event-card-footer">
+        <div style="display:flex;gap:16px">
+          <div class="event-stat">
+            <div class="event-stat-n">${e.reg_count}</div>
+            <div class="event-stat-l">등록</div>
+          </div>
+        </div>
+        <div class="event-actions">
+          <button class="btn btn-secondary btn-sm" onclick="openLinkMenu(event,'${e.id}')">링크 ▾</button>
+          <button class="btn btn-secondary btn-sm" onclick="editEvent('${e.id}')">편집</button>
+          <button class="btn btn-secondary btn-sm" onclick="deleteEvent('${e.id}')">삭제</button>
+        </div>
+      </div>
+    </div>
+  `).join('');
+}
+
+function formatDate(iso) {
+  if (!iso) return '일시 미정';
+  const d = new Date(iso);
+  return d.toLocaleDateString('ko-KR', { year:'numeric', month:'long', day:'numeric', weekday:'short' });
+}
+
+// ── 링크 메뉴 ──
+function openLinkMenu(e, eventId) {
+  e.stopPropagation();
+  linkMenuTarget = eventId;
+  const menu = document.getElementById('link-menu');
+  menu.style.top = (e.clientY + 8) + 'px';
+  menu.style.left = (e.clientX - 100) + 'px';
+  menu.classList.add('show');
+}
+document.addEventListener('click', () => document.getElementById('link-menu').classList.remove('show'));
+
+function getBase() {
+  return window.location.href.replace('index.html','').replace(/\/$/, '');
+}
+function copyLink(page) {
+  const url = `${getBase()}/${page}.html?id=${linkMenuTarget}`;
+  navigator.clipboard.writeText(url).then(() => toast('링크 복사됨!', 'success'));
+  document.getElementById('link-menu').classList.remove('show');
+}
+function openLink(page) {
+  window.open(`${getBase()}/${page}.html?id=${linkMenuTarget}`, '_blank');
+  document.getElementById('link-menu').classList.remove('show');
+}
+
+// ── 모달 ──
+function openCreateModal() {
+  document.getElementById('modal-title').textContent = '새 행사 만들기';
+  document.getElementById('edit-id').value = '';
+  document.getElementById('f-title').value = '';
+  document.getElementById('f-subtitle').value = '';
+  document.getElementById('f-date-start').value = '';
+  document.getElementById('f-date-end').value = '';
+  document.getElementById('f-location-name').value = '';
+  document.getElementById('f-location-addr').value = '';
+  document.getElementById('f-description').value = '';
+  document.getElementById('f-capacity').value = '';
+  document.getElementById('f-status').value = 'open';
+  document.getElementById('f-approval').value = 'false';
+  customFields = [];
+  selectedColor = '#1a1a2e';
+  document.querySelectorAll('.color-opt').forEach(o => o.classList.toggle('selected', o.dataset.color === selectedColor));
+  renderCustomFields();
+  document.getElementById('event-modal').classList.add('show');
+}
+
+function editEvent(id) {
+  const e = allEvents.find(x => x.id === id);
+  if (!e) return;
+  document.getElementById('modal-title').textContent = '행사 편집';
+  document.getElementById('edit-id').value = e.id;
+  document.getElementById('f-title').value = e.title || '';
+  document.getElementById('f-subtitle').value = e.subtitle || '';
+  document.getElementById('f-date-start').value = e.date_start ? e.date_start.slice(0,16) : '';
+  document.getElementById('f-date-end').value = e.date_end ? e.date_end.slice(0,16) : '';
+  document.getElementById('f-location-name').value = e.location_name || '';
+  document.getElementById('f-location-addr').value = e.location_addr || '';
+  document.getElementById('f-description').value = e.description || '';
+  document.getElementById('f-capacity').value = e.max_capacity || '';
+  document.getElementById('f-status').value = e.status;
+  document.getElementById('f-approval').value = String(e.require_approval);
+  customFields = Array.isArray(e.custom_fields) ? [...e.custom_fields] : [];
+  selectedColor = e.color_primary || '#1a1a2e';
+  document.querySelectorAll('.color-opt').forEach(o => o.classList.toggle('selected', o.dataset.color === selectedColor));
+  renderCustomFields();
+  document.getElementById('event-modal').classList.add('show');
+}
+
+function closeModal() {
+  document.getElementById('event-modal').classList.remove('show');
+}
+
+function selectColor(el) {
+  document.querySelectorAll('.color-opt').forEach(o => o.classList.remove('selected'));
+  el.classList.add('selected');
+  selectedColor = el.dataset.color;
+}
+
+// ── 커스텀 필드 ──
+function addCustomField() {
+  const label = document.getElementById('cf-label').value.trim();
+  const type = document.getElementById('cf-type').value;
+  const required = document.getElementById('cf-required').checked;
+  if (!label) { toast('항목 이름을 입력해주세요', 'error'); return; }
+  customFields.push({ label, type, required, id: 'cf_' + Date.now() });
+  document.getElementById('cf-label').value = '';
+  document.getElementById('cf-required').checked = false;
+  renderCustomFields();
+}
+
+function removeCustomField(id) {
+  customFields = customFields.filter(f => f.id !== id);
+  renderCustomFields();
+}
+
+function renderCustomFields() {
+  const list = document.getElementById('custom-fields-list');
+  const typeLabel = { text:'텍스트', select:'선택', checkbox:'체크' };
+  list.innerHTML = customFields.map(f => `
+    <div class="custom-field-item">
+      <span class="cf-label">${f.label}</span>
+      <span class="cf-type">${typeLabel[f.type]}</span>
+      ${f.required ? '<span class="cf-req">필수</span>' : ''}
+      <button class="cf-remove" onclick="removeCustomField('${f.id}')">×</button>
+    </div>
+  `).join('') || '<div style="font-size:12px;color:var(--muted);padding:4px 0">추가 항목 없음</div>';
+}
+
+// ── 저장 ──
+async function saveEvent() {
+  const title = document.getElementById('f-title').value.trim();
+  const dateStart = document.getElementById('f-date-start').value;
+  if (!title) { toast('행사명을 입력해주세요', 'error'); return; }
+  if (!dateStart) { toast('시작일시를 입력해주세요', 'error'); return; }
+
+  const payload = {
+    title, subtitle: document.getElementById('f-subtitle').value.trim(),
+    date_start: dateStart, date_end: document.getElementById('f-date-end').value || null,
+    location_name: document.getElementById('f-location-name').value.trim(),
+    location_addr: document.getElementById('f-location-addr').value.trim(),
+    description: document.getElementById('f-description').value.trim(),
+    max_capacity: parseInt(document.getElementById('f-capacity').value) || null,
+    status: document.getElementById('f-status').value,
+    require_approval: document.getElementById('f-approval').value === 'true',
+    color_primary: selectedColor,
+    custom_fields: customFields
+  };
+
+  const editId = document.getElementById('edit-id').value;
+  let error;
+  if (editId) {
+    ({ error } = await sb.from('events').update(payload).eq('id', editId));
+  } else {
+    ({ error } = await sb.from('events').insert(payload));
+  }
+
+  if (error) { toast('저장 실패: ' + error.message, 'error'); return; }
+  toast(editId ? '행사가 수정되었습니다' : '새 행사가 생성되었습니다', 'success');
+  closeModal();
+  await loadEvents();
+  await loadStats();
+}
+
+// ── 삭제 ──
+async function deleteEvent(id) {
+  const e = allEvents.find(x => x.id === id);
+  if (!confirm(`"${e?.title}" 행사를 삭제할까요?\n등록된 참가자 데이터도 모두 삭제됩니다.`)) return;
+  const { error } = await sb.from('events').delete().eq('id', id);
+  if (error) { toast('삭제 실패', 'error'); return; }
+  toast('행사가 삭제되었습니다', 'success');
+  await loadEvents();
+  await loadStats();
+}
+
+function showTab(tab) {
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  event.currentTarget.classList.add('active');
+}
+
+function toast(msg, type='info') {
+  const el = document.createElement('div');
+  el.className = 'pb-toast pb-toast--' + type;
+  el.textContent = msg;
+  document.body.appendChild(el);
+  setTimeout(() => el.classList.add('show'), 10);
+  setTimeout(() => { el.classList.remove('show'); setTimeout(() => el.remove(), 300); }, 3000);
+}
+
+init();
+</script>
+</body>
+</html>

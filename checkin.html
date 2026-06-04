@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>QR 체크인</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<style>
+:root {
+  --accent: #1a1a2e;
+  --bg: #0f0f1a;
+  --surface: #1a1a2e;
+  --surface2: #252538;
+  --border: #2e2e45;
+  --text: #f0f0f8;
+  --muted: #8888aa;
+  --success: #22c55e;
+  --error: #ef4444;
+  --warning: #f59e0b;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Pretendard', 'Apple SD Gothic Neo', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+
+.header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 14px 20px; display: flex; align-items: center; gap: 12px; position: sticky; top: 0; z-index: 10; }
+.header-back { color: var(--muted); font-size: 13px; cursor: pointer; }
+.header-info { flex: 1; }
+.header-title { font-size: 14px; font-weight: 600; }
+.header-sub { font-size: 11px; color: var(--muted); }
+.header-counts { text-align: right; }
+.header-counts .n { font-size: 18px; font-weight: 700; color: var(--success); }
+.header-counts .l { font-size: 10px; color: var(--muted); }
+
+.tabs { display: flex; background: var(--surface); border-bottom: 1px solid var(--border); }
+.tab { flex: 1; padding: 12px; text-align: center; font-size: 13px; font-weight: 500; cursor: pointer; color: var(--muted); border-bottom: 2px solid transparent; transition: all .15s; }
+.tab.active { color: #fff; border-bottom-color: #fff; }
+
+/* QR 스캐너 */
+.scanner-section { padding: 20px; }
+.scanner-box { background: var(--surface); border-radius: 14px; overflow: hidden; }
+.scanner-label { padding: 14px 16px 0; font-size: 13px; font-weight: 500; }
+.scanner-hint { padding: 4px 16px 12px; font-size: 12px; color: var(--muted); }
+#scanner-container { width: 100%; position: relative; }
+#scanner-container video { width: 100%; border-radius: 0; display: block; }
+#scanner-container canvas { display: none; }
+/* html5-qrcode 스타일 오버라이드 */
+#qr-reader { border: none !important; }
+#qr-reader__scan_region { border: none !important; }
+#qr-reader__scan_region img { display: none !important; }
+#qr-reader__dashboard { display: none !important; }
+
+.scanner-viewfinder { position: relative; background: #000; min-height: 220px; display: flex; align-items: center; justify-content: center; }
+.viewfinder-frame { position: absolute; width: 180px; height: 180px; pointer-events: none; z-index: 5; }
+.viewfinder-frame::before, .viewfinder-frame::after { content: ''; position: absolute; }
+.vf-corner { position: absolute; width: 28px; height: 28px; border-color: #fff; border-style: solid; }
+.vf-tl { top: 0; left: 0; border-width: 3px 0 0 3px; }
+.vf-tr { top: 0; right: 0; border-width: 3px 3px 0 0; }
+.vf-bl { bottom: 0; left: 0; border-width: 0 0 3px 3px; }
+.vf-br { bottom: 0; right: 0; border-width: 0 3px 3px 0; }
+.scan-line { position: absolute; left: 10px; right: 10px; height: 2px; background: rgba(255,255,255,.7); animation: scanline 1.8s ease-in-out infinite; }
+@keyframes scanline { 0%,100% { top: 15px; opacity: 1; } 50% { top: calc(100% - 15px); opacity: .6; } }
+
+.scan-result-card { margin: 12px 0; padding: 16px; border-radius: 10px; display: none; }
+.scan-result-card.show { display: block; }
+.scan-result-card.success { background: rgba(34,197,94,.15); border: 1px solid rgba(34,197,94,.3); }
+.scan-result-card.error { background: rgba(239,68,68,.15); border: 1px solid rgba(239,68,68,.3); }
+.scan-result-card.warning { background: rgba(245,158,11,.15); border: 1px solid rgba(245,158,11,.3); }
+.result-icon { font-size: 24px; margin-bottom: 8px; }
+.result-name { font-size: 18px; font-weight: 700; margin-bottom: 4px; }
+.result-info { font-size: 13px; color: var(--muted); }
+.result-org { font-size: 13px; margin-top: 4px; }
+
+.start-btn { width: 100%; padding: 14px; background: #fff; color: var(--bg); border: none; border-radius: 10px; font-size: 15px; font-weight: 700; cursor: pointer; margin-top: 12px; font-family: inherit; display: flex; align-items: center; justify-content: center; gap: 8px; }
+.start-btn svg { width: 18px; height: 18px; }
+.stop-btn { width: 100%; padding: 12px; background: transparent; color: var(--muted); border: 1px solid var(--border); border-radius: 10px; font-size: 14px; cursor: pointer; margin-top: 8px; font-family: inherit; }
+
+/* 수동 검색 탭 */
+.search-section { padding: 20px; }
+.search-input-wrap { display: flex; gap: 10px; margin-bottom: 16px; }
+.search-input-wrap input { flex: 1; padding: 12px 14px; border: 1.5px solid var(--border); border-radius: 9px; font-size: 14px; background: var(--surface2); color: var(--text); font-family: inherit; }
+.search-input-wrap input:focus { outline: none; border-color: #fff; }
+.search-btn { padding: 12px 16px; background: #fff; color: var(--bg); border: none; border-radius: 9px; font-size: 14px; font-weight: 600; cursor: pointer; font-family: inherit; white-space: nowrap; }
+
+.attendee-list { display: flex; flex-direction: column; gap: 8px; }
+.attendee-item { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; display: flex; align-items: center; gap: 12px; }
+.attendee-item.checked { border-color: rgba(34,197,94,.4); background: rgba(34,197,94,.08); }
+.attendee-avatar { width: 38px; height: 38px; border-radius: 50%; background: var(--surface2); display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 14px; flex-shrink: 0; }
+.attendee-info { flex: 1; min-width: 0; }
+.attendee-name { font-size: 14px; font-weight: 600; }
+.attendee-meta { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.checkin-badge { padding: 5px 10px; border-radius: 6px; font-size: 11px; font-weight: 600; cursor: pointer; border: none; font-family: inherit; flex-shrink: 0; }
+.checkin-badge.not-checked { background: rgba(255,255,255,.1); color: var(--text); }
+.checkin-badge.not-checked:hover { background: rgba(255,255,255,.2); }
+.checkin-badge.checked { background: rgba(34,197,94,.2); color: var(--success); cursor: default; }
+
+.empty { text-align: center; padding: 40px; color: var(--muted); font-size: 13px; }
+
+/* 실시간 입장 현황 바 -->
+.live-bar { background: var(--surface); border-top: 1px solid var(--border); padding: 12px 20px; display: flex; gap: 20px; align-items: center; }
+.live-item { text-align: center; }
+.live-n { font-size: 20px; font-weight: 700; }
+.live-l { font-size: 10px; color: var(--muted); }
+
+.loading { display: flex; align-items: center; justify-content: center; padding: 40px; }
+.spinner { width: 28px; height: 28px; border: 3px solid var(--border); border-top-color: #fff; border-radius: 50%; animation: spin .7s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%) translateY(10px); background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 12px 20px; font-size: 13px; font-weight: 500; z-index: 1000; opacity: 0; transition: all .25s; white-space: nowrap; box-shadow: 0 8px 24px rgba(0,0,0,.4); }
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+.toast.success { border-color: rgba(34,197,94,.5); color: var(--success); }
+.toast.error { border-color: rgba(239,68,68,.5); color: var(--error); }
+</style>
+</head>
+<body>
+
+<div id="app">
+  <div class="loading"><div class="spinner"></div></div>
+</div>
+
+<script>
+const SUPABASE_URL = 'https://ibeaiiizgqtlzkeqlsdg.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImliZWFpaWl6Z3F0bHprZXFsc2RnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA1NTk2OTYsImV4cCI6MjA5NjEzNTY5Nn0.KU4eYmhpS0dduvtxRRZuPbsEu1PrFgYVK-GGzDfTqvc';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+const eventId = new URLSearchParams(location.search).get('id');
+let eventData = null;
+let allRegistrations = [];
+let scannerRunning = false;
+let html5Qr = null;
+let lastScanTime = 0;
+let currentTab = 'scan';
+let stats = { total: 0, checkin: 0 };
+
+async function init() {
+  if (!eventId) { document.getElementById('app').innerHTML = '<div style="text-align:center;padding:60px;color:#888">행사 ID가 없습니다</div>'; return; }
+  const { data: ev } = await sb.from('events').select('*').eq('id', eventId).single();
+  if (!ev) { document.getElementById('app').innerHTML = '<div style="text-align:center;padding:60px;color:#888">행사를 찾을 수 없습니다</div>'; return; }
+  eventData = ev;
+  document.documentElement.style.setProperty('--accent', ev.color_primary || '#1a1a2e');
+  await loadRegistrations();
+  renderShell();
+  setupRealtime();
+}
+
+async function loadRegistrations() {
+  const { data } = await sb.from('registrations').select('*').eq('event_id', eventId).neq('status', 'cancelled').order('name');
+  allRegistrations = data || [];
+  stats.total = allRegistrations.filter(r => r.status === 'confirmed').length;
+  stats.checkin = allRegistrations.filter(r => r.checked_in).length;
+}
+
+function renderShell() {
+  document.getElementById('app').innerHTML = `
+    <div class="header">
+      <div class="header-info">
+        <div class="header-title">${eventData.title}</div>
+        <div class="header-sub">체크인 운영</div>
+      </div>
+      <div class="header-counts">
+        <div class="n" id="stat-checkin">${stats.checkin}</div>
+        <div class="l">입장 / <span id="stat-total">${stats.total}</span>명</div>
+      </div>
+    </div>
+    <div class="tabs">
+      <div class="tab active" id="tab-scan" onclick="switchTab('scan')">📷 QR 스캔</div>
+      <div class="tab" id="tab-search" onclick="switchTab('search')">🔍 수동 검색</div>
+    </div>
+    <div id="tab-content"></div>
+    <div id="toast" class="toast"></div>
+  `;
+  renderScanTab();
+}
+
+function switchTab(tab) {
+  currentTab = tab;
+  if (scannerRunning) stopScanner();
+  document.getElementById('tab-scan').classList.toggle('active', tab === 'scan');
+  document.getElementById('tab-search').classList.toggle('active', tab === 'search');
+  tab === 'scan' ? renderScanTab() : renderSearchTab();
+}
+
+// ── QR 스캔 탭 ──
+function renderScanTab() {
+  document.getElementById('tab-content').innerHTML = `
+    <div class="scanner-section">
+      <div class="scanner-box">
+        <div class="scanner-label">QR 코드를 카메라에 비춰주세요</div>
+        <div class="scanner-hint">참가자 확인증의 QR코드를 스캔합니다</div>
+        <div class="scanner-viewfinder" id="scanner-viewfinder">
+          <div id="qr-reader" style="width:100%;"></div>
+          <div class="viewfinder-frame">
+            <div class="vf-corner vf-tl"></div>
+            <div class="vf-corner vf-tr"></div>
+            <div class="vf-corner vf-bl"></div>
+            <div class="vf-corner vf-br"></div>
+            <div class="scan-line" id="scan-line" style="display:none"></div>
+          </div>
+        </div>
+        <div style="padding:12px">
+          <div class="scan-result-card" id="scan-result"></div>
+          <button class="start-btn" id="start-btn" onclick="startScanner()">
+            <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+            카메라 시작
+          </button>
+          <button class="stop-btn" id="stop-btn" onclick="stopScanner()" style="display:none">카메라 중지</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+async function startScanner() {
+  document.getElementById('start-btn').style.display = 'none';
+  document.getElementById('stop-btn').style.display = 'block';
+  document.getElementById('scan-line').style.display = 'block';
+  scannerRunning = true;
+  html5Qr = new Html5Qrcode('qr-reader');
+  try {
+    await html5Qr.start({ facingMode: 'environment' }, { fps: 15, qrbox: { width: 220, height: 220 } }, onScanSuccess, () => {});
+  } catch (e) {
+    toast('카메라 접근 실패. 브라우저 권한을 확인해주세요.', 'error');
+    stopScanner();
+  }
+}
+
+async function stopScanner() {
+  if (html5Qr && scannerRunning) {
+    try { await html5Qr.stop(); } catch(e) {}
+    scannerRunning = false;
+  }
+  document.getElementById('start-btn').style.display = 'flex';
+  document.getElementById('stop-btn').style.display = 'none';
+  document.getElementById('scan-line').style.display = 'none';
+}
+
+async function onScanSuccess(code) {
+  const now = Date.now();
+  if (now - lastScanTime < 2000) return;
+  lastScanTime = now;
+  await processCheckin(code, 'scan');
+}
+
+// ── 수동 검색 탭 ──
+function renderSearchTab(query = '') {
+  const filtered = query
+    ? allRegistrations.filter(r =>
+        r.name.includes(query) ||
+        (r.email || '').includes(query) ||
+        (r.organization || '').includes(query) ||
+        (r.qr_code || '').includes(query)
+      )
+    : allRegistrations.slice(0, 30);
+
+  document.getElementById('tab-content').innerHTML = `
+    <div class="search-section">
+      <div class="search-input-wrap">
+        <input type="text" id="search-input" placeholder="이름·이메일·소속·QR코드 검색" value="${query}" onkeydown="if(event.key==='Enter')doSearch()">
+        <button class="search-btn" onclick="doSearch()">검색</button>
+      </div>
+      <div class="attendee-list">
+        ${filtered.length ? filtered.map(r => renderAttendeeItem(r)).join('') :
+          `<div class="empty">${query ? '검색 결과가 없습니다' : '등록자가 없습니다'}</div>`}
+      </div>
+      ${!query && allRegistrations.length > 30 ? `<div style="text-align:center;padding:16px;font-size:12px;color:var(--muted)">검색어를 입력하면 전체 ${allRegistrations.length}명에서 검색합니다</div>` : ''}
+    </div>
+  `;
+  document.getElementById('search-input').focus();
+}
+
+function renderAttendeeItem(r) {
+  const initials = r.name.slice(0, 1);
+  const checkedClass = r.checked_in ? 'checked' : '';
+  const badgeText = r.checked_in ? '✓ 입장 완료' : '체크인';
+  const badgeClass = r.checked_in ? 'checked' : 'not-checked';
+  const checkedTime = r.checked_in_at ? new Date(r.checked_in_at).toLocaleTimeString('ko-KR', { hour:'2-digit', minute:'2-digit' }) : '';
+  return `
+    <div class="attendee-item ${checkedClass}" id="item-${r.id}">
+      <div class="attendee-avatar">${initials}</div>
+      <div class="attendee-info">
+        <div class="attendee-name">${r.name}</div>
+        <div class="attendee-meta">${[r.organization, r.job_title, r.email].filter(Boolean).join(' · ')}</div>
+        ${checkedTime ? `<div style="font-size:11px;color:var(--success);margin-top:2px">입장 ${checkedTime}</div>` : ''}
+      </div>
+      ${r.checked_in
+        ? `<span class="checkin-badge checked">${badgeText}</span>`
+        : `<button class="checkin-badge not-checked" onclick="manualCheckin('${r.id}')">${badgeText}</button>`
+      }
+    </div>
+  `;
+}
+
+function doSearch() {
+  const q = document.getElementById('search-input').value.trim();
+  renderSearchTab(q);
+}
+
+async function manualCheckin(regId) {
+  const r = allRegistrations.find(x => x.id === regId);
+  if (!r) return;
+  await processCheckin(r.qr_code, 'manual');
+}
+
+// ── 체크인 처리 (공통) ──
+async function processCheckin(qrCode, source) {
+  const reg = allRegistrations.find(r => r.qr_code === qrCode);
+
+  if (!reg) {
+    if (source === 'scan') showScanResult('error', '❌', '등록되지 않은 QR코드', '이 행사의 참가자가 아닙니다');
+    else toast('등록되지 않은 QR코드입니다', 'error');
+    return;
+  }
+
+  if (reg.status === 'pending') {
+    if (source === 'scan') showScanResult('warning', '⏳', reg.name, '승인 대기 중입니다');
+    else toast(`${reg.name} — 승인 대기 중`, 'error');
+    return;
+  }
+
+  if (reg.checked_in) {
+    const time = reg.checked_in_at ? new Date(reg.checked_in_at).toLocaleTimeString('ko-KR', { hour:'2-digit', minute:'2-digit' }) : '';
+    if (source === 'scan') showScanResult('warning', '⚠️', reg.name, `이미 입장했습니다 (${time})`);
+    else toast(`${reg.name} — 이미 입장 처리됨`, 'error');
+    return;
+  }
+
+  // 체크인 처리
+  const now = new Date().toISOString();
+  const { error } = await sb.from('registrations').update({ checked_in: true, checked_in_at: now }).eq('id', reg.id);
+  if (error) { toast('체크인 오류: ' + error.message, 'error'); return; }
+
+  await sb.from('checkin_logs').insert({ event_id: eventId, registration_id: reg.id, action: 'checkin' });
+
+  // 로컬 상태 업데이트
+  const idx = allRegistrations.findIndex(r => r.id === reg.id);
+  if (idx >= 0) { allRegistrations[idx].checked_in = true; allRegistrations[idx].checked_in_at = now; }
+  stats.checkin++;
+  updateStatBar();
+
+  const orgInfo = [reg.organization, reg.job_title].filter(Boolean).join(' · ');
+  if (source === 'scan') {
+    showScanResult('success', '✅', reg.name, orgInfo || reg.email);
+  } else {
+    toast(`${reg.name} 체크인 완료!`, 'success');
+    renderSearchTab(document.getElementById('search-input')?.value || '');
+  }
+}
+
+function showScanResult(type, icon, name, info) {
+  const el = document.getElementById('scan-result');
+  if (!el) return;
+  el.className = `scan-result-card show ${type}`;
+  el.innerHTML = `<div class="result-icon">${icon}</div><div class="result-name">${name}</div><div class="result-info">${info}</div>`;
+  setTimeout(() => { el.className = 'scan-result-card'; }, 3500);
+}
+
+function updateStatBar() {
+  const el1 = document.getElementById('stat-checkin');
+  const el2 = document.getElementById('stat-total');
+  if (el1) el1.textContent = stats.checkin;
+  if (el2) el2.textContent = stats.total;
+}
+
+// ── Realtime 구독 ──
+function setupRealtime() {
+  sb.channel('checkin-' + eventId)
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'checkin_logs', filter: `event_id=eq.${eventId}` }, () => {
+      loadRegistrations().then(updateStatBar);
+    })
+    .subscribe();
+}
+
+function toast(msg, type = 'info') {
+  const el = document.getElementById('toast');
+  if (!el) return;
+  el.textContent = msg;
+  el.className = `toast show ${type}`;
+  setTimeout(() => { el.classList.remove('show'); }, 3000);
+}
+
+init();
+</script>
+</body>
+</html>

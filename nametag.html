@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>명찰 출력</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+<style>
+:root {
+  --accent: #1a1a2e;
+  --bg: #f4f3ef;
+  --surface: #ffffff;
+  --border: #e5e3dc;
+  --text: #1a1917;
+  --muted: #7a7870;
+  --success: #16a34a;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Pretendard', 'Apple SD Gothic Neo', sans-serif; background: var(--bg); color: var(--text); }
+
+.topbar { background: var(--surface); border-bottom: 1px solid var(--border); padding: 0 24px; height: 52px; display: flex; align-items: center; gap: 12px; position: sticky; top: 0; z-index: 10; }
+.topbar-title { font-size: 14px; font-weight: 600; flex: 1; }
+.btn { display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; border-radius: 7px; font-size: 12px; font-weight: 500; cursor: pointer; border: 1px solid var(--border); background: var(--surface); color: var(--text); transition: all .15s; font-family: inherit; }
+.btn:hover { background: var(--bg); }
+.btn-primary { background: var(--accent); color: #fff; border-color: transparent; }
+.btn-primary:hover { opacity: .9; }
+.btn svg { width: 14px; height: 14px; }
+
+.controls { padding: 16px 24px; background: var(--surface); border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.control-group { display: flex; align-items: center; gap: 8px; }
+.control-label { font-size: 12px; font-weight: 600; color: var(--muted); }
+select { padding: 6px 10px; border: 1px solid var(--border); border-radius: 7px; font-size: 12px; background: var(--surface); color: var(--text); font-family: inherit; }
+input[type=text] { padding: 6px 10px; border: 1px solid var(--border); border-radius: 7px; font-size: 12px; background: var(--surface); color: var(--text); font-family: inherit; width: 200px; }
+input[type=text]:focus { outline: none; border-color: var(--accent); }
+.stat-pill { background: var(--bg); border: 1px solid var(--border); border-radius: 20px; padding: 4px 12px; font-size: 12px; }
+.stat-pill span { font-weight: 700; }
+
+/* 명찰 그리드 */
+.nametag-grid { padding: 24px; display: grid; gap: 16px; }
+.nametag-grid.size-76 { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
+.nametag-grid.size-95 { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
+
+/* 명찰 카드 (화면 미리보기용) */
+.nametag-preview-wrap { cursor: pointer; }
+.nametag-preview-wrap:hover .nametag-preview { box-shadow: 0 4px 16px rgba(0,0,0,.12); }
+.nametag-preview { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; transition: box-shadow .2s; position: relative; }
+.nametag-preview.selected { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
+.nametag-preview .select-check { position: absolute; top: 8px; right: 8px; width: 20px; height: 20px; border-radius: 50%; background: var(--accent); color: #fff; font-size: 12px; display: none; align-items: center; justify-content: center; }
+.nametag-preview.selected .select-check { display: flex; }
+.nametag-header { height: 8px; background: var(--accent); }
+.nametag-body { padding: 14px 12px 10px; display: flex; gap: 10px; align-items: flex-start; }
+.nametag-qr { flex-shrink: 0; }
+.nametag-qr canvas { display: block; border: 1px solid var(--border); border-radius: 4px; }
+.nametag-text { flex: 1; min-width: 0; }
+.nametag-name { font-weight: 700; line-height: 1.2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nametag-org { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 2px; }
+.nametag-title-role { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nametag-event { text-align: center; border-top: 1px solid var(--border); padding: 6px 10px; font-size: 10px; color: var(--muted); }
+.nametag-status { font-size: 10px; font-weight: 600; padding: 2px 7px; border-radius: 10px; background: #dcfce7; color: #166534; }
+.nametag-status.pending { background: #fef3c7; color: #92400e; }
+.nametag-footer { padding: 8px 12px; display: flex; align-items: center; justify-content: space-between; border-top: 1px solid var(--border); background: #fafaf8; }
+
+/* 인쇄용 명찰 (실제 크기) */
+@media print {
+  body > *:not(#print-area) { display: none !important; }
+  #print-area { display: block !important; }
+  @page { margin: 10mm; size: A4; }
+  .print-nametag { page-break-inside: avoid; break-inside: avoid; }
+}
+
+#print-area { display: none; }
+.print-grid { display: flex; flex-wrap: wrap; gap: 5mm; padding: 0; }
+
+/* 76x76mm */
+.print-nametag.s76 { width: 76mm; height: 76mm; border: 0.5pt solid #ddd; border-radius: 3mm; overflow: hidden; display: flex; flex-direction: column; background: #fff; }
+.s76 .nt-header { height: 7mm; flex-shrink: 0; }
+.s76 .nt-body { flex: 1; display: flex; gap: 3mm; padding: 3mm; align-items: center; }
+.s76 .nt-qr canvas { width: 22mm !important; height: 22mm !important; }
+.s76 .nt-info { flex: 1; min-width: 0; }
+.s76 .nt-name { font-size: 14pt; font-weight: 700; line-height: 1.2; word-break: break-all; }
+.s76 .nt-org { font-size: 8pt; color: #666; margin-top: 1mm; }
+.s76 .nt-role { font-size: 9pt; font-weight: 600; margin-top: 1mm; }
+.s76 .nt-footer { height: 6mm; border-top: 0.5pt solid #eee; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.s76 .nt-event { font-size: 7pt; color: #999; }
+
+/* 95x120mm */
+.print-nametag.s95 { width: 95mm; height: 120mm; border: 0.5pt solid #ddd; border-radius: 4mm; overflow: hidden; display: flex; flex-direction: column; background: #fff; }
+.s95 .nt-header { height: 10mm; flex-shrink: 0; }
+.s95 .nt-body { flex: 1; display: flex; flex-direction: column; padding: 4mm 5mm 3mm; align-items: center; justify-content: center; text-align: center; gap: 2mm; }
+.s95 .nt-qr { margin-bottom: 2mm; }
+.s95 .nt-qr canvas { width: 30mm !important; height: 30mm !important; }
+.s95 .nt-name { font-size: 18pt; font-weight: 700; line-height: 1.2; }
+.s95 .nt-org { font-size: 10pt; color: #444; }
+.s95 .nt-role { font-size: 11pt; font-weight: 600; background: #f0f0f0; padding: 1mm 3mm; border-radius: 3mm; }
+.s95 .nt-footer { height: 8mm; border-top: 0.5pt solid #eee; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.s95 .nt-event { font-size: 8pt; color: #999; }
+
+.empty { text-align: center; padding: 60px; color: var(--muted); }
+.loading { display: flex; align-items: center; justify-content: center; padding: 60px; }
+.spinner { width: 28px; height: 28px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin .7s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.toast { position: fixed; bottom: 20px; right: 20px; background: var(--text); color: #fff; border-radius: 8px; padding: 10px 16px; font-size: 13px; z-index: 9999; opacity: 0; transition: all .25s; transform: translateY(6px); }
+.toast.show { opacity: 1; transform: translateY(0); }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-title" id="page-title">명찰 출력</div>
+  <div style="display:flex;gap:8px">
+    <button class="btn" onclick="toggleSelectAll()">전체 선택</button>
+    <button class="btn btn-primary" onclick="printSelected()">
+      <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/></svg>
+      선택 출력
+    </button>
+  </div>
+</div>
+
+<div class="controls">
+  <div class="control-group">
+    <span class="control-label">명찰 크기</span>
+    <select id="size-select" onchange="renderGrid()">
+      <option value="76">실속형 76×76mm</option>
+      <option value="95">고급형 95×120mm</option>
+    </select>
+  </div>
+  <div class="control-group">
+    <span class="control-label">필터</span>
+    <select id="filter-status" onchange="renderGrid()">
+      <option value="confirmed">확정자만</option>
+      <option value="all">전체</option>
+      <option value="not-checked">미입장</option>
+      <option value="checked">입장 완료</option>
+    </select>
+  </div>
+  <div class="control-group">
+    <input type="text" id="search-input" placeholder="이름·소속 검색" oninput="renderGrid()">
+  </div>
+  <div class="stat-pill"><span id="stat-selected">0</span>명 선택 / 전체 <span id="stat-total">0</span>명</div>
+</div>
+
+<div id="grid-container">
+  <div class="loading"><div class="spinner"></div></div>
+</div>
+
+<!-- 인쇄용 숨김 영역 -->
+<div id="print-area"></div>
+
+<div id="toast" class="toast"></div>
+
+<script>
+const SUPABASE_URL = 'https://ibeaiiizgqtlzkeqlsdg.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImliZWFpaWl6Z3F0bHprZXFsc2RnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA1NTk2OTYsImV4cCI6MjA5NjEzNTY5Nn0.KU4eYmhpS0dduvtxRRZuPbsEu1PrFgYVK-GGzDfTqvc';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+const eventId = new URLSearchParams(location.search).get('id');
+let eventData = null;
+let registrations = [];
+let selected = new Set();
+
+async function init() {
+  if (!eventId) return;
+  const { data: ev } = await sb.from('events').select('*').eq('id', eventId).single();
+  if (!ev) return;
+  eventData = ev;
+  document.title = ev.title + ' — 명찰 출력';
+  document.getElementById('page-title').textContent = ev.title + ' — 명찰 출력';
+  document.documentElement.style.setProperty('--accent', ev.color_primary || '#1a1a2e');
+  const { data } = await sb.from('registrations').select('*').eq('event_id', eventId).order('name');
+  registrations = data || [];
+  renderGrid();
+}
+
+function getFiltered() {
+  const status = document.getElementById('filter-status').value;
+  const q = document.getElementById('search-input').value.trim().toLowerCase();
+  return registrations.filter(r => {
+    if (status === 'confirmed' && r.status !== 'confirmed') return false;
+    if (status === 'not-checked' && (r.checked_in || r.status !== 'confirmed')) return false;
+    if (status === 'checked' && !r.checked_in) return false;
+    if (q && !r.name.toLowerCase().includes(q) && !(r.organization||'').toLowerCase().includes(q)) return false;
+    return true;
+  });
+}
+
+async function renderGrid() {
+  const size = document.getElementById('size-select').value;
+  const filtered = getFiltered();
+  document.getElementById('stat-total').textContent = filtered.length;
+  updateSelectedCount();
+
+  if (!filtered.length) {
+    document.getElementById('grid-container').innerHTML = '<div class="empty">표시할 명찰이 없습니다</div>';
+    return;
+  }
+
+  const container = document.getElementById('grid-container');
+  container.innerHTML = `<div class="nametag-grid size-${size === '76' ? '76' : '95'}" id="nt-grid"></div>`;
+  const grid = document.getElementById('nt-grid');
+
+  for (const r of filtered) {
+    const wrap = document.createElement('div');
+    wrap.className = 'nametag-preview-wrap';
+    wrap.innerHTML = `
+      <div class="nametag-preview${selected.has(r.id) ? ' selected' : ''}" id="prev-${r.id}" onclick="toggleSelect('${r.id}')">
+        <div class="select-check">✓</div>
+        <div class="nametag-header" style="background:${eventData?.color_primary || '#1a1a2e'}"></div>
+        <div class="nametag-body">
+          <div class="nametag-qr"><canvas id="qr-prev-${r.id}"></canvas></div>
+          <div class="nametag-text">
+            <div class="nametag-name" style="font-size:${size==='76'?'13px':'15px'}">${r.name}</div>
+            ${r.organization ? `<div class="nametag-org" style="font-size:${size==='76'?'11px':'12px'}">${r.organization}</div>` : ''}
+            ${r.job_title ? `<div class="nametag-title-role" style="font-size:${size==='76'?'11px':'12px'};font-weight:600">${r.job_title}</div>` : ''}
+          </div>
+        </div>
+        <div class="nametag-event">
+          <span class="nametag-status${r.status==='pending'?' pending':''}">${r.status==='pending'?'승인대기':'확정'}</span>
+          ${r.checked_in ? ' · ✓ 입장' : ''}
+        </div>
+        <div class="nametag-footer">
+          <button onclick="event.stopPropagation();printOne('${r.id}')" style="font-size:11px;border:none;background:none;cursor:pointer;color:var(--muted);padding:0">🖨 개별 출력</button>
+        </div>
+      </div>
+    `;
+    grid.appendChild(wrap);
+    // QR 생성
+    await QRCode.toCanvas(document.getElementById(`qr-prev-${r.id}`), r.qr_code, {
+      width: size === '76' ? 56 : 64, margin: 1, color: { dark: '#1a1917', light: '#ffffff' }
+    });
+  }
+}
+
+function toggleSelect(id) {
+  selected.has(id) ? selected.delete(id) : selected.add(id);
+  const el = document.getElementById('prev-' + id);
+  if (el) el.classList.toggle('selected', selected.has(id));
+  updateSelectedCount();
+}
+
+function toggleSelectAll() {
+  const filtered = getFiltered();
+  const allSelected = filtered.every(r => selected.has(r.id));
+  if (allSelected) { filtered.forEach(r => selected.delete(r.id)); }
+  else { filtered.forEach(r => selected.add(r.id)); }
+  renderGrid();
+}
+
+function updateSelectedCount() {
+  document.getElementById('stat-selected').textContent = selected.size;
+}
+
+// ── 출력 ──
+async function printSelected() {
+  if (!selected.size) { toast('출력할 명찰을 선택해주세요'); return; }
+  const toprint = registrations.filter(r => selected.has(r.id));
+  await buildPrintArea(toprint);
+  window.print();
+}
+
+async function printOne(id) {
+  const r = registrations.find(x => x.id === id);
+  if (!r) return;
+  await buildPrintArea([r]);
+  window.print();
+}
+
+async function buildPrintArea(list) {
+  const size = document.getElementById('size-select').value;
+  const cls = size === '76' ? 's76' : 's95';
+  const printArea = document.getElementById('print-area');
+  printArea.innerHTML = '<div class="print-grid" id="print-grid"></div>';
+  const grid = document.getElementById('print-grid');
+
+  for (const r of list) {
+    const div = document.createElement('div');
+    div.className = `print-nametag ${cls}`;
+
+    const qrCanvas = document.createElement('canvas');
+    await QRCode.toCanvas(qrCanvas, r.qr_code, {
+      width: size === '76' ? 84 : 114, margin: 1, color: { dark: '#1a1917', light: '#ffffff' }
+    });
+
+    div.innerHTML = `
+      <div class="nt-header" style="background:${eventData?.color_primary || '#1a1a2e'}"></div>
+      <div class="nt-body">
+        <div class="nt-qr"></div>
+        <div class="nt-info">
+          <div class="nt-name">${r.name}</div>
+          ${r.organization ? `<div class="nt-org">${r.organization}</div>` : ''}
+          ${r.department ? `<div class="nt-org">${r.department}</div>` : ''}
+          ${r.job_title ? `<div class="nt-role">${r.job_title}</div>` : ''}
+        </div>
+      </div>
+      <div class="nt-footer">
+        <span class="nt-event">${eventData?.title || ''}</span>
+      </div>
+    `;
+
+    if (cls === 's95') {
+      // 95mm는 중앙 레이아웃
+      div.querySelector('.nt-body').innerHTML = `
+        <div class="nt-qr"></div>
+        <div class="nt-name">${r.name}</div>
+        ${r.organization ? `<div class="nt-org">${r.organization}${r.department ? ' · ' + r.department : ''}</div>` : ''}
+        ${r.job_title ? `<div class="nt-role">${r.job_title}</div>` : ''}
+      `;
+    }
+
+    div.querySelector('.nt-qr').appendChild(qrCanvas);
+    grid.appendChild(div);
+  }
+
+  // 인쇄 후 로그 기록
+  const ids = list.map(r => r.id);
+  await sb.from('registrations').update({ nametag_printed: true, nametag_printed_at: new Date().toISOString() }).in('id', ids);
+}
+
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 3000);
+}
+
+init();
+</script>
+</body>
+</html>

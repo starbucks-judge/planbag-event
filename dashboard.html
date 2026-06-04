@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>행사 대시보드</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+:root {
+  --accent: #1a1a2e;
+  --bg: #f4f3ef;
+  --surface: #ffffff;
+  --surface2: #f9f8f5;
+  --border: #e5e3dc;
+  --text: #1a1917;
+  --muted: #7a7870;
+  --success: #16a34a;
+  --danger: #dc2626;
+  --warning: #d97706;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Pretendard', 'Apple SD Gothic Neo', sans-serif; background: var(--bg); color: var(--text); font-size: 14px; }
+a { color: inherit; text-decoration: none; }
+
+.topbar { background: var(--surface); border-bottom: 1px solid var(--border); padding: 0 24px; height: 52px; display: flex; align-items: center; gap: 10px; position: sticky; top: 0; z-index: 10; }
+.topbar-back { font-size: 18px; cursor: pointer; color: var(--muted); }
+.topbar-title { flex: 1; font-size: 14px; font-weight: 600; }
+.event-badge { display: inline-flex; align-items: center; padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; }
+.badge-open { background: #dcfce7; color: #166534; }
+.badge-draft { background: #f3f4f6; color: #6b7280; }
+.badge-closed { background: #fef3c7; color: #92400e; }
+.badge-ended { background: #f3f4f6; color: #9ca3af; }
+.btn { display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; border-radius: 7px; font-size: 12px; font-weight: 500; cursor: pointer; border: 1px solid var(--border); background: var(--surface); color: var(--text); transition: all .15s; font-family: inherit; white-space: nowrap; }
+.btn:hover { background: var(--bg); }
+.btn-primary { background: var(--accent); color: #fff; border-color: transparent; }
+.btn-primary:hover { opacity: .9; }
+.btn svg { width: 13px; height: 13px; }
+
+.content { padding: 20px 24px 40px; max-width: 1100px; }
+
+/* 통계 카드 */
+.stats-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin-bottom: 20px; }
+.stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; }
+.stat-card-n { font-size: 24px; font-weight: 700; }
+.stat-card-l { font-size: 11px; color: var(--muted); margin-top: 2px; }
+.stat-card-bar { height: 3px; background: var(--border); border-radius: 2px; margin-top: 8px; overflow: hidden; }
+.stat-card-bar-fill { height: 100%; background: var(--accent); border-radius: 2px; transition: width .5s; }
+
+/* 차트 */
+.charts-row { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; margin-bottom: 20px; }
+.chart-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
+.chart-title { font-size: 13px; font-weight: 600; margin-bottom: 14px; }
+
+/* 필터 + 명단 테이블 */
+.table-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+.table-toolbar { padding: 12px 16px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.table-toolbar h3 { font-size: 13px; font-weight: 600; flex: 1; }
+input[type=text], select { padding: 6px 10px; border: 1px solid var(--border); border-radius: 7px; font-size: 12px; background: var(--surface); color: var(--text); font-family: inherit; }
+input[type=text]:focus, select:focus { outline: none; border-color: var(--accent); }
+.table-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 12px; }
+thead th { padding: 9px 12px; text-align: left; font-size: 11px; font-weight: 600; color: var(--muted); border-bottom: 1px solid var(--border); background: var(--surface2); white-space: nowrap; }
+tbody td { padding: 10px 12px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+tbody tr:last-child td { border-bottom: none; }
+tbody tr:hover td { background: var(--surface2); }
+.td-name { font-weight: 600; }
+.status-badge { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 20px; font-size: 10px; font-weight: 600; }
+.st-confirmed { background: #dcfce7; color: #166534; }
+.st-pending { background: #fef3c7; color: #92400e; }
+.st-cancelled { background: #fee2e2; color: #991b1b; }
+.checkin-dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; margin-right: 4px; }
+.dot-in { background: var(--success); }
+.dot-out { background: var(--border); }
+.action-btn { padding: 3px 9px; border-radius: 5px; font-size: 11px; cursor: pointer; border: 1px solid var(--border); background: none; color: var(--text); font-family: inherit; }
+.action-btn:hover { background: var(--bg); }
+.action-btn.danger { border-color: #fca5a5; color: var(--danger); }
+.action-btn.danger:hover { background: #fef2f2; }
+.action-btn.success { border-color: #86efac; color: var(--success); }
+.action-btn.success:hover { background: #f0fdf4; }
+
+.table-footer { padding: 10px 16px; border-top: 1px solid var(--border); font-size: 11px; color: var(--muted); display: flex; align-items: center; gap: 12px; }
+
+.empty { text-align: center; padding: 40px; color: var(--muted); }
+.loading { display: flex; align-items: center; justify-content: center; padding: 40px; }
+.spinner { width: 24px; height: 24px; border: 2.5px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin .7s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.toast { position: fixed; bottom: 20px; right: 20px; background: var(--text); color: #fff; border-radius: 8px; padding: 10px 16px; font-size: 13px; z-index: 9999; opacity: 0; transition: all .25s; transform: translateY(6px); }
+.toast.show { opacity: 1; transform: translateY(0); }
+.toast.success { background: var(--success); }
+.toast.error { background: var(--danger); }
+
+@media (max-width: 768px) {
+  .stats-grid { grid-template-columns: repeat(2, 1fr); }
+  .charts-row { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <span class="topbar-back" onclick="history.back()">←</span>
+  <div class="topbar-title" id="page-title">대시보드 로딩중...</div>
+  <div id="event-status-badge"></div>
+  <button class="btn" onclick="refreshAll()">
+    <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+    새로고침
+  </button>
+  <button class="btn btn-primary" onclick="exportCSV()">
+    <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+    CSV 내보내기
+  </button>
+</div>
+
+<div class="content">
+  <!-- 통계 -->
+  <div class="stats-grid">
+    <div class="stat-card">
+      <div class="stat-card-n" id="stat-total">—</div>
+      <div class="stat-card-l">총 등록자</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-card-n" id="stat-confirmed">—</div>
+      <div class="stat-card-l">확정</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-card-n" id="stat-checkin">—</div>
+      <div class="stat-card-l">입장 완료</div>
+      <div class="stat-card-bar"><div class="stat-card-bar-fill" id="stat-checkin-bar" style="width:0%"></div></div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-card-n" id="stat-pending">—</div>
+      <div class="stat-card-l">승인 대기</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-card-n" id="stat-printed">—</div>
+      <div class="stat-card-l">명찰 출력</div>
+    </div>
+  </div>
+
+  <!-- 차트 -->
+  <div class="charts-row">
+    <div class="chart-card">
+      <div class="chart-title">시간대별 등록 추이</div>
+      <canvas id="chart-timeline" height="100"></canvas>
+    </div>
+    <div class="chart-card">
+      <div class="chart-title">등록 경로 (UTM)</div>
+      <canvas id="chart-utm" height="150"></canvas>
+    </div>
+  </div>
+
+  <!-- 참가자 명단 -->
+  <div class="table-card">
+    <div class="table-toolbar">
+      <h3>참가자 명단</h3>
+      <input type="text" id="search-input" placeholder="이름·이메일·소속 검색" oninput="renderTable()" style="width:200px">
+      <select id="filter-status" onchange="renderTable()">
+        <option value="">전체 상태</option>
+        <option value="confirmed">확정</option>
+        <option value="pending">승인 대기</option>
+        <option value="cancelled">취소</option>
+      </select>
+      <select id="filter-checkin" onchange="renderTable()">
+        <option value="">전체</option>
+        <option value="yes">입장 완료</option>
+        <option value="no">미입장</option>
+      </select>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>이름</th>
+            <th>소속</th>
+            <th>직함</th>
+            <th>이메일</th>
+            <th>상태</th>
+            <th>입장</th>
+            <th>등록일시</th>
+            <th>관리</th>
+          </tr>
+        </thead>
+        <tbody id="table-body">
+          <tr><td colspan="9" class="empty">로딩중...</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="table-footer" id="table-footer"></div>
+  </div>
+</div>
+
+<div id="toast" class="toast"></div>
+
+<script>
+const SUPABASE_URL = 'https://ibeaiiizgqtlzkeqlsdg.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImliZWFpaWl6Z3F0bHprZXFsc2RnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA1NTk2OTYsImV4cCI6MjA5NjEzNTY5Nn0.KU4eYmhpS0dduvtxRRZuPbsEu1PrFgYVK-GGzDfTqvc';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+const eventId = new URLSearchParams(location.search).get('id');
+let eventData = null;
+let allRegistrations = [];
+let timelineChart = null, utmChart = null;
+
+async function init() {
+  if (!eventId) return;
+  const { data: ev } = await sb.from('events').select('*').eq('id', eventId).single();
+  if (!ev) return;
+  eventData = ev;
+  document.title = ev.title + ' — 대시보드';
+  document.getElementById('page-title').textContent = ev.title;
+  document.documentElement.style.setProperty('--accent', ev.color_primary || '#1a1a2e');
+  const statusMap = { open:'badge-open', draft:'badge-draft', closed:'badge-closed', ended:'badge-ended' };
+  const statusLabel = { open:'접수 중', draft:'초안', closed:'마감', ended:'종료' };
+  document.getElementById('event-status-badge').innerHTML = `<span class="event-badge ${statusMap[ev.status]}">${statusLabel[ev.status]}</span>`;
+  await loadData();
+  setupRealtime();
+}
+
+async function loadData() {
+  const { data } = await sb.from('registrations').select('*').eq('event_id', eventId).order('created_at');
+  allRegistrations = data || [];
+  updateStats();
+  renderTable();
+  renderCharts();
+}
+
+function updateStats() {
+  const confirmed = allRegistrations.filter(r => r.status === 'confirmed');
+  const checkin = allRegistrations.filter(r => r.checked_in);
+  const pending = allRegistrations.filter(r => r.status === 'pending');
+  const printed = allRegistrations.filter(r => r.nametag_printed);
+  document.getElementById('stat-total').textContent = allRegistrations.length;
+  document.getElementById('stat-confirmed').textContent = confirmed.length;
+  document.getElementById('stat-checkin').textContent = checkin.length;
+  document.getElementById('stat-pending').textContent = pending.length;
+  document.getElementById('stat-printed').textContent = printed.length;
+  const pct = confirmed.length ? Math.round(checkin.length / confirmed.length * 100) : 0;
+  document.getElementById('stat-checkin-bar').style.width = pct + '%';
+}
+
+function getFiltered() {
+  const q = document.getElementById('search-input').value.trim().toLowerCase();
+  const st = document.getElementById('filter-status').value;
+  const ci = document.getElementById('filter-checkin').value;
+  return allRegistrations.filter(r => {
+    if (q && !r.name.toLowerCase().includes(q) && !(r.email||'').toLowerCase().includes(q) && !(r.organization||'').toLowerCase().includes(q)) return false;
+    if (st && r.status !== st) return false;
+    if (ci === 'yes' && !r.checked_in) return false;
+    if (ci === 'no' && r.checked_in) return false;
+    return true;
+  });
+}
+
+function renderTable() {
+  const filtered = getFiltered();
+  const tbody = document.getElementById('table-body');
+  if (!filtered.length) {
+    tbody.innerHTML = '<tr><td colspan="9" class="empty">해당하는 참가자가 없습니다</td></tr>';
+    document.getElementById('table-footer').textContent = '';
+    return;
+  }
+  const stLabel = { confirmed:'확정', pending:'대기', cancelled:'취소' };
+  const stClass = { confirmed:'st-confirmed', pending:'st-pending', cancelled:'st-cancelled' };
+  tbody.innerHTML = filtered.map((r, i) => {
+    const checkinTime = r.checked_in_at ? new Date(r.checked_in_at).toLocaleTimeString('ko-KR', { hour:'2-digit', minute:'2-digit' }) : '';
+    const createdAt = new Date(r.created_at).toLocaleDateString('ko-KR', { month:'2-digit', day:'2-digit' }) + ' ' + new Date(r.created_at).toLocaleTimeString('ko-KR', { hour:'2-digit', minute:'2-digit' });
+    return `
+      <tr>
+        <td style="color:var(--muted)">${i + 1}</td>
+        <td class="td-name">${r.name}</td>
+        <td>${r.organization || ''}</td>
+        <td>${r.job_title || ''}</td>
+        <td style="color:var(--muted)">${r.email}</td>
+        <td><span class="status-badge ${stClass[r.status]}">${stLabel[r.status]}</span></td>
+        <td>
+          <span class="checkin-dot ${r.checked_in ? 'dot-in' : 'dot-out'}"></span>
+          ${r.checked_in ? checkinTime : '—'}
+        </td>
+        <td style="color:var(--muted)">${createdAt}</td>
+        <td>
+          <div style="display:flex;gap:4px">
+            ${r.status === 'pending' ? `<button class="action-btn success" onclick="approveReg('${r.id}')">승인</button>` : ''}
+            ${r.status === 'confirmed' && !r.checked_in ? `<button class="action-btn success" onclick="manualCheckin('${r.id}')">체크인</button>` : ''}
+            ${r.status !== 'cancelled' ? `<button class="action-btn danger" onclick="cancelReg('${r.id}')">취소</button>` : ''}
+          </div>
+        </td>
+      </tr>
+    `;
+  }).join('');
+  document.getElementById('table-footer').textContent = `총 ${filtered.length}명 표시 (전체 ${allRegistrations.length}명)`;
+}
+
+function renderCharts() {
+  // 시간대별 등록 추이
+  const byDay = {};
+  allRegistrations.forEach(r => {
+    const d = new Date(r.created_at);
+    const key = d.toLocaleDateString('ko-KR', { month:'2-digit', day:'2-digit' });
+    byDay[key] = (byDay[key] || 0) + 1;
+  });
+  const labels = Object.keys(byDay).sort();
+  const vals = labels.map(l => byDay[l]);
+
+  if (timelineChart) timelineChart.destroy();
+  timelineChart = new Chart(document.getElementById('chart-timeline'), {
+    type: 'bar',
+    data: {
+      labels, datasets: [{
+        label: '등록 수', data: vals,
+        backgroundColor: (eventData?.color_primary || '#1a1a2e') + '99',
+        borderColor: eventData?.color_primary || '#1a1a2e',
+        borderWidth: 1, borderRadius: 4
+      }]
+    },
+    options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } }
+  });
+
+  // UTM 소스
+  const utm = {};
+  allRegistrations.forEach(r => {
+    const src = r.utm_source || '직접 방문';
+    utm[src] = (utm[src] || 0) + 1;
+  });
+  const utmLabels = Object.keys(utm);
+  const utmVals = utmLabels.map(l => utm[l]);
+  const colors = ['#1a1a2e','#2563eb','#0f766e','#7c3aed','#dc2626','#d97706'];
+
+  if (utmChart) utmChart.destroy();
+  utmChart = new Chart(document.getElementById('chart-utm'), {
+    type: 'doughnut',
+    data: {
+      labels: utmLabels,
+      datasets: [{ data: utmVals, backgroundColor: colors.slice(0, utmLabels.length), borderWidth: 0 }]
+    },
+    options: { plugins: { legend: { position: 'bottom', labels: { font: { size: 11 }, boxWidth: 12 } } }, cutout: '65%' }
+  });
+}
+
+// ── 참가자 관리 ──
+async function approveReg(id) {
+  const { error } = await sb.from('registrations').update({ status: 'confirmed' }).eq('id', id);
+  if (error) { toast('승인 실패', 'error'); return; }
+  toast('승인 완료', 'success');
+  await loadData();
+}
+
+async function cancelReg(id) {
+  const r = allRegistrations.find(x => x.id === id);
+  if (!confirm(`${r?.name}의 등록을 취소할까요?`)) return;
+  const { error } = await sb.from('registrations').update({ status: 'cancelled' }).eq('id', id);
+  if (error) { toast('취소 실패', 'error'); return; }
+  toast('취소 처리되었습니다', 'success');
+  await loadData();
+}
+
+async function manualCheckin(id) {
+  const now = new Date().toISOString();
+  const { error } = await sb.from('registrations').update({ checked_in: true, checked_in_at: now }).eq('id', id);
+  if (error) { toast('체크인 실패', 'error'); return; }
+  await sb.from('checkin_logs').insert({ event_id: eventId, registration_id: id, action: 'checkin' });
+  toast('체크인 완료', 'success');
+  await loadData();
+}
+
+// ── CSV 내보내기 ──
+function exportCSV() {
+  const filtered = getFiltered();
+  if (!filtered.length) { toast('내보낼 데이터가 없습니다'); return; }
+  const rows = filtered.map(r => ({
+    이름: r.name, 이메일: r.email, 전화번호: r.phone || '',
+    소속: r.organization || '', 부서: r.department || '', 직함: r.job_title || '',
+    상태: r.status === 'confirmed' ? '확정' : r.status === 'pending' ? '대기' : '취소',
+    입장여부: r.checked_in ? '입장' : '미입장',
+    입장시각: r.checked_in_at ? new Date(r.checked_in_at).toLocaleTimeString('ko-KR') : '',
+    명찰출력: r.nametag_printed ? '출력' : '미출력',
+    등록일시: new Date(r.created_at).toLocaleString('ko-KR'),
+    유입경로: r.utm_source || ''
+  }));
+  const headers = Object.keys(rows[0]);
+  const bom = '\uFEFF';
+  const csv = bom + [headers.join(','), ...rows.map(r => headers.map(h => `"${(r[h]||'').toString().replace(/"/g,'""')}"`).join(','))].join('\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `${eventData?.title}_참가자명단_${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+  toast('CSV 내보내기 완료', 'success');
+}
+
+async function refreshAll() {
+  await loadData();
+  toast('새로고침 완료', 'success');
+}
+
+// ── Realtime ──
+function setupRealtime() {
+  sb.channel('dashboard-' + eventId)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'registrations', filter: `event_id=eq.${eventId}` }, () => loadData())
+    .subscribe();
+}
+
+function toast(msg, type = 'info') {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = `toast show ${type}`;
+  setTimeout(() => el.classList.remove('show'), 3000);
+}
+
+init();
+</script>
+</body>
+</html>
