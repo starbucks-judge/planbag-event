@@ -5,7 +5,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>행사 등록</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
 <style>
 :root {
   --accent: #1a1a2e;
@@ -302,8 +301,8 @@ function showComplete(reg, ev) {
         <h2>${ev.require_approval ? '신청 접수 완료' : '등록 완료!'}</h2>
         <p>${statusMsg}</p>
 
-        <div class="qr-container">
-          <canvas id="qr-canvas"></canvas>
+        <div class="qr-container" id="qr-container">
+          <img id="qr-img" src="https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(reg.qr_code)}&margin=10&color=1a1917" width="180" height="180" style="border-radius:4px;display:block" alt="QR코드">
           <div class="qr-label">입장 QR코드 · ${reg.qr_code}</div>
         </div>
 
@@ -327,30 +326,14 @@ function showComplete(reg, ev) {
     </div>
   `;
 
-  // QR 생성 — DOM 렌더링 완료 후 실행
-  setTimeout(() => {
-    const canvas = document.getElementById('qr-canvas');
-    if (!canvas) return;
-    QRCode.toDataURL(reg.qr_code, { width: 180, margin: 2, color: { dark: '#1a1917', light: '#ffffff' } }, (err, url) => {
-      if (err) return;
-      const img = document.createElement('img');
-      img.src = url;
-      img.style.cssText = 'display:block;width:180px;height:180px;border-radius:4px';
-      const c = document.getElementById('qr-canvas');
-      if (c) c.parentNode.replaceChild(img, c);
-    });
-  }, 80);
 }
 
 function saveQR() {
-  // img 또는 canvas 둘 다 처리
-  const img = document.querySelector('.qr-container img');
-  const canvas = document.getElementById('qr-canvas');
-  const src = img ? img.src : (canvas ? canvas.toDataURL() : null);
-  if (!src) return;
+  const img = document.getElementById('qr-img');
+  if (!img) return;
   const a = document.createElement('a');
   a.download = 'planbag-qr.png';
-  a.href = src;
+  a.href = img.src;
   a.click();
 }
 

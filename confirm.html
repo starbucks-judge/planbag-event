@@ -5,7 +5,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>참가 확인증</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
 <style>
 :root {
   --accent: #1a1a2e;
@@ -131,7 +130,7 @@ function renderConfirm(reg, ev) {
         <div class="qr-section">
           <div class="qr-label-top">${isPending ? '⏳ 승인 대기 중' : '✅ 입장 QR코드'}</div>
           <div class="qr-box">
-            <canvas id="qr-canvas"></canvas>
+            <img id="qr-img" width="200" height="200" style="border-radius:6px;display:block" alt="QR코드">
           </div>
           <div class="qr-code-text">${reg.qr_code}</div>
           <div class="qr-hint">
@@ -204,19 +203,19 @@ function renderConfirm(reg, ev) {
     <div class="footer">Powered by Planbag · planbag.co.kr</div>
   `;
 
-  // QR 생성
-  QRCode.toCanvas(document.getElementById('qr-canvas'), reg.qr_code, {
-    width: 200, margin: 2,
-    color: { dark: '#1a1917', light: '#ffffff' }
-  });
+  // QR 생성 — 외부 API 방식
+  const qrImg = document.getElementById('qr-img');
+  if (qrImg) {
+    qrImg.src = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(reg.qr_code)}&margin=10&color=1a1917`;
+  }
 }
 
 function saveQR() {
-  const canvas = document.getElementById('qr-canvas');
-  if (!canvas) return;
+  const img = document.getElementById('qr-img');
+  if (!img) return;
   const a = document.createElement('a');
-  a.download = `QR_입장권.png`;
-  a.href = canvas.toDataURL('image/png');
+  a.download = 'QR_입장권.png';
+  a.href = img.src;
   a.click();
 }
 
