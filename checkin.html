@@ -179,6 +179,16 @@ const eventId = new URLSearchParams(location.search).get('id');
 let eventData = null;
 let allRegistrations = [];
 let autoPrintEnabled = false;
+let autoApproveEnabled = false;
+
+function toggleAutoApprove() {
+  autoApproveEnabled = !autoApproveEnabled;
+  const track = document.getElementById('toggle-approve-track');
+  const label = document.getElementById('toggle-approve-label');
+  if (track) track.classList.toggle('on', autoApproveEnabled);
+  if (label) label.textContent = autoApproveEnabled ? '즉시승인 ON' : '즉시승인 OFF';
+  if (autoApproveEnabled) toast('즉시승인 ON — 승인 대기자도 바로 체크인됩니다', 'success');
+}
 let namedtagSize = '76'; // '76' or '95'
 
 function toggleAutoPrint() {
@@ -300,12 +310,18 @@ function renderShell() {
         <div class="header-title">${eventData.title}</div>
         <div class="header-sub">체크인 운영</div>
       </div>
-      <div style="display:flex;align-items:center;gap:8px">
+      <div style="display:flex;align-items:center;gap:12px">
+        <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);cursor:pointer;user-select:none">
+          <div class="toggle-wrap" onclick="toggleAutoApprove()">
+            <div class="toggle-track" id="toggle-approve-track"></div>
+          </div>
+          <span id="toggle-approve-label">즉시승인 OFF</span>
+        </label>
         <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);cursor:pointer;user-select:none">
           <div class="toggle-wrap" onclick="toggleAutoPrint()">
             <div class="toggle-track" id="toggle-track"></div>
           </div>
-          <span id="toggle-label">명찰 자동출력 OFF</span>
+          <span id="toggle-label">명찰출력 OFF</span>
         </label>
       </div>
       <div class="header-counts">
@@ -314,14 +330,15 @@ function renderShell() {
       </div>
     </div>
     <div class="tabs">
-      <div class="tab active" id="tab-scan" onclick="switchTab('scan')">📷 카메라</div>
-      <div class="tab" id="tab-usb" onclick="switchTab('usb')">🔌 USB 스캐너</div>
+      <div class="tab" id="tab-scan" onclick="switchTab('scan')">📷 카메라</div>
+      <div class="tab active" id="tab-usb" onclick="switchTab('usb')">🔌 USB 스캐너</div>
       <div class="tab" id="tab-search" onclick="switchTab('search')">🔍 수동 검색</div>
     </div>
     <div id="tab-content"></div>
     <div id="toast" class="toast"></div>
   `;
-  renderScanTab();
+  currentTab = 'usb';
+  renderUSBTab();
 }
 
 function switchTab(tab) {
@@ -583,9 +600,23 @@ async function processCheckin(qrCode, source) {
   }
 
   if (reg.status === 'pending') {
-    if (source === 'scan' || source === 'usb') showScanResult('warning', '⏳', reg.name, '승인 대기 중입니다');
-    else toast(`${reg.name} — 승인 대기 중`, 'error');
-    return;
+    if (autoApproveEnabled) {
+      // 즉시승인 ON: pending → confirmed 후 체크인 계속 진행
+      const { error: approveErr } = await sb.from('registrations').update({ status: 'confirmed' }).eq('id', reg.id);
+      if (approveErr) { toast('승인 처리 실패', 'error'); return; }
+      const idx2 = allRegistrations.findIndex(r => r.id === reg.id);
+      if (idx2 >= 0) allRegistrations[idx2].status = 'confirmed';
+      toast(`${reg.name} 승인 완료`, 'success');
+      // 승인 후 체크인 계속 진행 (fall through)
+    } else {
+      // 즉시승인 OFF: 메세지 표시 후 승인 버튼 제공 (사라지지 않음)
+      if (source === 'scan' || source === 'usb') {
+        showPendingResult(reg);
+      } else {
+        toast(`${reg.name} — 승인 대기 중`, 'error');
+      }
+      return;
+    }
   }
 
   if (reg.checked_in) {
@@ -621,6 +652,42 @@ async function processCheckin(qrCode, source) {
   }
 }
 
+function showPendingResult(reg) {
+  const elId = currentTab === 'usb' ? 'usb-result' : 'scan-result';
+  const el = document.getElementById(elId);
+  if (!el) return;
+  el.className = 'scan-result-card show warning';
+  el.innerHTML = `
+    <div class="result-icon">⏳</div>
+    <div class="result-name">${reg.name}</div>
+    <div class="result-info">${[reg.organization, reg.job_title].filter(Boolean).join(' · ') || reg.email}</div>
+    <button onclick="approveAndCheckin('${reg.id}')" style="margin-top:10px;padding:8px 20px;background:#22c55e;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">
+      ✅ 지금 승인하기
+    </button>
+    <button onclick="dismissResult()" style="margin-top:6px;padding:6px 16px;background:transparent;color:var(--muted);border:1px solid var(--border);border-radius:8px;font-size:12px;cursor:pointer;font-family:inherit">
+      닫기
+    </button>
+  `;
+  if (currentTab === 'usb') {
+    setTimeout(() => { const inp = document.getElementById('usb-input'); if (inp) inp.focus(); }, 100);
+  }
+}
+
+async function approveAndCheckin(regId) {
+  const reg = allRegistrations.find(r => r.id === regId);
+  if (!reg) return;
+  await sb.from('registrations').update({ status: 'confirmed' }).eq('id', regId);
+  const idx = allRegistrations.findIndex(r => r.id === regId);
+  if (idx >= 0) allRegistrations[idx].status = 'confirmed';
+  dismissResult();
+  await processCheckin(reg.qr_code, currentTab === 'usb' ? 'usb' : 'scan');
+}
+
+function dismissResult() {
+  const ids = ['scan-result', 'usb-result'];
+  ids.forEach(id => { const el = document.getElementById(id); if (el) el.className = 'scan-result-card'; });
+}
+
 function showScanResult(type, icon, name, info) {
   // 현재 탭에 맞는 결과창에 표시
   const elId = currentTab === 'usb' ? 'usb-result' : 'scan-result';
@@ -628,7 +695,7 @@ function showScanResult(type, icon, name, info) {
   if (!el) return;
   el.className = `scan-result-card show ${type}`;
   el.innerHTML = `<div class="result-icon">${icon}</div><div class="result-name">${name}</div><div class="result-info">${info}</div>`;
-  setTimeout(() => { el.className = 'scan-result-card'; }, 3500);
+  setTimeout(() => { el.className = 'scan-result-card'; }, 5000);
   // USB 탭이면 입력창 재포커스
   if (currentTab === 'usb') {
     setTimeout(() => {

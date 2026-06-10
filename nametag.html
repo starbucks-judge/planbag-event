@@ -5,7 +5,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>명찰 출력</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
 <style>
 :root {
   --accent: #1a1a2e;
@@ -185,7 +184,7 @@ function getFiltered() {
   });
 }
 
-async function renderGrid() {
+function renderGrid() {
   const size = document.getElementById('size-select').value;
   const filtered = getFiltered();
   document.getElementById('stat-total').textContent = filtered.length;
@@ -201,6 +200,7 @@ async function renderGrid() {
   const grid = document.getElementById('nt-grid');
 
   for (const r of filtered) {
+    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(r.qr_code)}`;
     const wrap = document.createElement('div');
     wrap.className = 'nametag-preview-wrap';
     wrap.innerHTML = `
@@ -208,7 +208,9 @@ async function renderGrid() {
         <div class="select-check">✓</div>
         <div class="nametag-header" style="background:${eventData?.color_primary || '#1a1a2e'}"></div>
         <div class="nametag-body">
-          <div class="nametag-qr"><canvas id="qr-prev-${r.id}"></canvas></div>
+          <div class="nametag-qr">
+            <img src="${qrUrl}" width="${size==='76'?56:64}" height="${size==='76'?56:64}" style="display:block;border-radius:3px" alt="QR">
+          </div>
           <div class="nametag-text">
             <div class="nametag-name" style="font-size:${size==='76'?'13px':'15px'}">${r.name}</div>
             ${r.organization ? `<div class="nametag-org" style="font-size:${size==='76'?'11px':'12px'}">${r.organization}</div>` : ''}
@@ -225,10 +227,6 @@ async function renderGrid() {
       </div>
     `;
     grid.appendChild(wrap);
-    // QR 생성
-    await QRCode.toCanvas(document.getElementById(`qr-prev-${r.id}`), r.qr_code, {
-      width: size === '76' ? 56 : 64, margin: 1, color: { dark: '#1a1917', light: '#ffffff' }
-    });
   }
 }
 
@@ -252,69 +250,79 @@ function updateSelectedCount() {
 }
 
 // ── 출력 ──
-async function printSelected() {
+function printSelected() {
   if (!selected.size) { toast('출력할 명찰을 선택해주세요'); return; }
-  const toprint = registrations.filter(r => selected.has(r.id));
-  await buildPrintArea(toprint);
-  window.print();
+  const list = registrations.filter(r => selected.has(r.id));
+  openPrintWindow(list);
 }
 
-async function printOne(id) {
+function printOne(id) {
   const r = registrations.find(x => x.id === id);
   if (!r) return;
-  await buildPrintArea([r]);
-  window.print();
+  openPrintWindow([r]);
 }
 
-async function buildPrintArea(list) {
+function openPrintWindow(list) {
   const size = document.getElementById('size-select').value;
-  const cls = size === '76' ? 's76' : 's95';
-  const printArea = document.getElementById('print-area');
-  printArea.innerHTML = '<div class="print-grid" id="print-grid"></div>';
-  const grid = document.getElementById('print-grid');
+  const accent = eventData?.color_primary || '#1a1a2e';
+  const title = eventData?.title || '';
 
-  for (const r of list) {
-    const div = document.createElement('div');
-    div.className = `print-nametag ${cls}`;
-
-    const qrCanvas = document.createElement('canvas');
-    await QRCode.toCanvas(qrCanvas, r.qr_code, {
-      width: size === '76' ? 84 : 114, margin: 1, color: { dark: '#1a1917', light: '#ffffff' }
-    });
-
-    div.innerHTML = `
-      <div class="nt-header" style="background:${eventData?.color_primary || '#1a1a2e'}"></div>
-      <div class="nt-body">
-        <div class="nt-qr"></div>
-        <div class="nt-info">
-          <div class="nt-name">${r.name}</div>
-          ${r.organization ? `<div class="nt-org">${r.organization}</div>` : ''}
-          ${r.department ? `<div class="nt-org">${r.department}</div>` : ''}
-          ${r.job_title ? `<div class="nt-role">${r.job_title}</div>` : ''}
+  const nametagsHtml = list.map(r => {
+    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(r.qr_code)}`;
+    if (size === '95') {
+      return `<div style="width:95mm;height:120mm;border:.5pt solid #ddd;border-radius:4mm;overflow:hidden;display:flex;flex-direction:column;background:#fff;page-break-inside:avoid;margin:2mm">
+        <div style="height:10mm;background:${accent};flex-shrink:0"></div>
+        <div style="flex:1;display:flex;flex-direction:column;padding:4mm 5mm 3mm;align-items:center;justify-content:center;text-align:center;gap:2mm">
+          <img src="${qrUrl}" width="114" height="114" style="border-radius:3mm">
+          <div style="font-size:18pt;font-weight:700;line-height:1.2">${r.name}</div>
+          ${r.organization ? `<div style="font-size:10pt;color:#444">${r.organization}${r.department ? ' · '+r.department : ''}</div>` : ''}
+          ${r.job_title ? `<div style="font-size:11pt;font-weight:600;background:#f0f0f0;padding:1mm 3mm;border-radius:3mm">${r.job_title}</div>` : ''}
         </div>
-      </div>
-      <div class="nt-footer">
-        <span class="nt-event">${eventData?.title || ''}</span>
-      </div>
-    `;
-
-    if (cls === 's95') {
-      // 95mm는 중앙 레이아웃
-      div.querySelector('.nt-body').innerHTML = `
-        <div class="nt-qr"></div>
-        <div class="nt-name">${r.name}</div>
-        ${r.organization ? `<div class="nt-org">${r.organization}${r.department ? ' · ' + r.department : ''}</div>` : ''}
-        ${r.job_title ? `<div class="nt-role">${r.job_title}</div>` : ''}
-      `;
+        <div style="height:8mm;border-top:.5pt solid #eee;display:flex;align-items:center;justify-content:center;font-size:8pt;color:#999;flex-shrink:0">${title}</div>
+      </div>`;
+    } else {
+      return `<div style="width:76mm;height:76mm;border:.5pt solid #ddd;border-radius:3mm;overflow:hidden;display:flex;flex-direction:column;background:#fff;page-break-inside:avoid;margin:2mm">
+        <div style="height:7mm;background:${accent};flex-shrink:0"></div>
+        <div style="flex:1;display:flex;gap:3mm;padding:3mm;align-items:center">
+          <img src="${qrUrl}" width="84" height="84" style="border:.5pt solid #eee;border-radius:2mm;flex-shrink:0">
+          <div style="flex:1;min-width:0">
+            <div style="font-size:14pt;font-weight:700;line-height:1.2;word-break:break-all">${r.name}</div>
+            ${r.organization ? `<div style="font-size:8pt;color:#666;margin-top:1mm">${r.organization}</div>` : ''}
+            ${r.job_title ? `<div style="font-size:9pt;font-weight:600;margin-top:1mm">${r.job_title}</div>` : ''}
+          </div>
+        </div>
+        <div style="height:6mm;border-top:.5pt solid #eee;display:flex;align-items:center;justify-content:center;font-size:7pt;color:#999;flex-shrink:0">${title}</div>
+      </div>`;
     }
+  }).join('');
 
-    div.querySelector('.nt-qr').appendChild(qrCanvas);
-    grid.appendChild(div);
-  }
+  const win = window.open('', '_blank');
+  if (!win) { toast('팝업이 차단됐습니다. 브라우저에서 팝업을 허용해주세요.'); return; }
 
-  // 인쇄 후 로그 기록
+  win.document.write(`<!DOCTYPE html><html><head>
+    <meta charset="UTF-8">
+    <title>명찰 출력 — ${list.length}명</title>
+    <style>
+      * { box-sizing:border-box; margin:0; padding:0; }
+      body { background:#fff; padding:3mm; }
+      .grid { display:flex; flex-wrap:wrap; gap:0; }
+      @media print { @page { margin:5mm; } }
+    </style>
+  </head><body>
+    <div class="grid">${nametagsHtml}</div>
+    <script>
+      const imgs = document.querySelectorAll('img');
+      let loaded = 0;
+      function tryPrint() { if (++loaded >= imgs.length) { window.print(); setTimeout(() => window.close(), 500); } }
+      if (imgs.length === 0) { window.print(); setTimeout(() => window.close(), 500); }
+      else imgs.forEach(img => { if (img.complete) tryPrint(); else { img.onload = tryPrint; img.onerror = tryPrint; } });
+    <\/script>
+  </body></html>`);
+  win.document.close();
+
+  // 출력 로그
   const ids = list.map(r => r.id);
-  await sb.from('registrations').update({ nametag_printed: true, nametag_printed_at: new Date().toISOString() }).in('id', ids);
+  sb.from('registrations').update({ nametag_printed: true, nametag_printed_at: new Date().toISOString() }).in('id', ids);
 }
 
 function toast(msg) {
