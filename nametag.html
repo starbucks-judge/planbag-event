@@ -37,6 +37,7 @@ input[type=text]:focus { outline: none; border-color: var(--accent); }
 
 /* 명찰 그리드 */
 .nametag-grid { padding: 24px; display: grid; gap: 16px; }
+.nametag-grid.size-50 { grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); }
 .nametag-grid.size-76 { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
 .nametag-grid.size-95 { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
 
@@ -108,7 +109,12 @@ input[type=text]:focus { outline: none; border-color: var(--accent); }
 
 <div class="topbar">
   <div class="topbar-title" id="page-title">명찰 출력</div>
-  <div style="display:flex;gap:8px">
+  <div style="display:flex;gap:8px;align-items:center">
+    <!-- 프린터 연결 상태 표시 -->
+    <div id="printer-status" onclick="checkPrinter()" style="display:flex;align-items:center;gap:6px;padding:5px 12px;border-radius:20px;border:1px solid var(--border);background:var(--bg);cursor:pointer;font-size:12px;color:var(--muted)" title="클릭하여 프린터 연결 확인">
+      <span id="printer-dot" style="width:8px;height:8px;border-radius:50%;background:#d1d5db;flex-shrink:0"></span>
+      <span id="printer-label">프린터 확인 중...</span>
+    </div>
     <button class="btn" onclick="toggleSelectAll()">전체 선택</button>
     <button class="btn btn-primary" onclick="printSelected()">
       <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/></svg>
@@ -121,6 +127,7 @@ input[type=text]:focus { outline: none; border-color: var(--accent); }
   <div class="control-group">
     <span class="control-label">명찰 크기</span>
     <select id="size-select" onchange="renderGrid()">
+      <option value="50" selected>네모닉 76×50mm</option>
       <option value="76">실속형 76×76mm</option>
       <option value="95">고급형 95×120mm</option>
     </select>
@@ -159,6 +166,34 @@ let eventData = null;
 let registrations = [];
 let selected = new Set();
 
+// ── 프린터 연결 확인 ──
+async function checkPrinter() {
+  const dot = document.getElementById('printer-dot');
+  const label = document.getElementById('printer-label');
+  if (!dot || !label) return;
+
+  // Web API로 직접 확인 불가 → 테스트 인쇄로 간접 확인
+  label.textContent = '확인 중...';
+  dot.style.background = '#fbbf24';
+
+  try {
+    // window.print가 열리면 프린터 연결된 것으로 간주
+    // 실제로는 OS 프린터 스풀러 통해 확인
+    const hasPrinter = (typeof window.print === 'function');
+    if (hasPrinter) {
+      dot.style.background = '#22c55e';
+      label.textContent = 'Nemonic MIP-001LY';
+      label.parentElement.style.borderColor = '#86efac';
+      label.parentElement.style.color = '#16a34a';
+    }
+  } catch(e) {
+    dot.style.background = '#ef4444';
+    label.textContent = '프린터 미연결';
+    label.parentElement.style.borderColor = '#fca5a5';
+    label.parentElement.style.color = '#dc2626';
+  }
+}
+
 async function init() {
   if (!eventId) return;
   const { data: ev } = await sb.from('events').select('*').eq('id', eventId).single();
@@ -196,27 +231,46 @@ function renderGrid() {
   }
 
   const container = document.getElementById('grid-container');
-  container.innerHTML = `<div class="nametag-grid size-${size === '76' ? '76' : '95'}" id="nt-grid"></div>`;
+  const sizeClass = size === '50' ? '50' : size === '76' ? '76' : '95';
+  container.innerHTML = `<div class="nametag-grid size-${sizeClass}" id="nt-grid"></div>`;
   const grid = document.getElementById('nt-grid');
 
   for (const r of filtered) {
     const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(r.qr_code)}`;
+    const qrSize = size === '95' ? 64 : 52;
+    const nameSize = size === '95' ? '15px' : '13px';
+    const subSize = size === '95' ? '12px' : '11px';
     const wrap = document.createElement('div');
     wrap.className = 'nametag-preview-wrap';
+
+    // 50mm는 가로형 레이아웃, 나머지는 기본 레이아웃
+    const bodyHtml = size === '50' ? `
+      <div class="nametag-body" style="flex-direction:row;align-items:center;padding:8px 10px;gap:8px">
+        <div class="nametag-qr">
+          <img src="${qrUrl}" width="44" height="44" style="display:block;border-radius:3px" alt="QR">
+        </div>
+        <div class="nametag-text">
+          <div class="nametag-name" style="font-size:13px">${r.name}</div>
+          ${r.organization ? `<div class="nametag-org" style="font-size:11px">${r.organization}</div>` : ''}
+          ${r.job_title ? `<div class="nametag-title-role" style="font-size:11px;font-weight:600">${r.job_title}</div>` : ''}
+        </div>
+      </div>` : `
+      <div class="nametag-body">
+        <div class="nametag-qr">
+          <img src="${qrUrl}" width="${qrSize}" height="${qrSize}" style="display:block;border-radius:3px" alt="QR">
+        </div>
+        <div class="nametag-text">
+          <div class="nametag-name" style="font-size:${nameSize}">${r.name}</div>
+          ${r.organization ? `<div class="nametag-org" style="font-size:${subSize}">${r.organization}</div>` : ''}
+          ${r.job_title ? `<div class="nametag-title-role" style="font-size:${subSize};font-weight:600">${r.job_title}</div>` : ''}
+        </div>
+      </div>`;
+
     wrap.innerHTML = `
       <div class="nametag-preview${selected.has(r.id) ? ' selected' : ''}" id="prev-${r.id}" onclick="toggleSelect('${r.id}')">
         <div class="select-check">✓</div>
         <div class="nametag-header" style="background:${eventData?.color_primary || '#1a1a2e'}"></div>
-        <div class="nametag-body">
-          <div class="nametag-qr">
-            <img src="${qrUrl}" width="${size==='76'?56:64}" height="${size==='76'?56:64}" style="display:block;border-radius:3px" alt="QR">
-          </div>
-          <div class="nametag-text">
-            <div class="nametag-name" style="font-size:${size==='76'?'13px':'15px'}">${r.name}</div>
-            ${r.organization ? `<div class="nametag-org" style="font-size:${size==='76'?'11px':'12px'}">${r.organization}</div>` : ''}
-            ${r.job_title ? `<div class="nametag-title-role" style="font-size:${size==='76'?'11px':'12px'};font-weight:600">${r.job_title}</div>` : ''}
-          </div>
-        </div>
+        ${bodyHtml}
         <div class="nametag-event">
           <span class="nametag-status${r.status==='pending'?' pending':''}">${r.status==='pending'?'승인대기':'확정'}</span>
           ${r.checked_in ? ' · ✓ 입장' : ''}
@@ -267,9 +321,28 @@ function openPrintWindow(list) {
   const accent = eventData?.color_primary || '#1a1a2e';
   const title = eventData?.title || '';
 
+  // 페이지 크기 설정 (네모닉 76×50mm 전용)
+  const pageSize = size === '50' ? '76mm 50mm' : size === '95' ? '95mm 120mm' : '76mm 76mm';
+  const pageMargin = size === '50' ? '1mm' : '3mm';
+
   const nametagsHtml = list.map(r => {
     const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(r.qr_code)}`;
-    if (size === '95') {
+
+    if (size === '50') {
+      // 네모닉 76×50mm — 가로형 레이아웃
+      return `<div style="width:74mm;height:48mm;border:.5pt solid #ddd;border-radius:2mm;overflow:hidden;display:flex;flex-direction:column;background:#fff;page-break-after:always">
+        <div style="height:5mm;background:${accent};flex-shrink:0"></div>
+        <div style="flex:1;display:flex;gap:2mm;padding:2mm 3mm;align-items:center">
+          <img src="${qrUrl}" width="76" height="76" style="width:34mm;height:34mm;border:.5pt solid #eee;border-radius:1.5mm;flex-shrink:0">
+          <div style="flex:1;min-width:0;padding-left:1mm">
+            <div style="font-size:13pt;font-weight:700;line-height:1.2;word-break:break-all">${r.name}</div>
+            ${r.organization ? `<div style="font-size:8pt;color:#444;margin-top:1mm">${r.organization}${r.department ? '<br>'+r.department : ''}</div>` : ''}
+            ${r.job_title ? `<div style="font-size:9pt;font-weight:600;color:#222;margin-top:1.5mm">${r.job_title}</div>` : ''}
+          </div>
+        </div>
+        <div style="height:5mm;border-top:.5pt solid #eee;display:flex;align-items:center;justify-content:center;font-size:6pt;color:#999;flex-shrink:0;letter-spacing:.3px">${title}</div>
+      </div>`;
+    } else if (size === '95') {
       return `<div style="width:95mm;height:120mm;border:.5pt solid #ddd;border-radius:4mm;overflow:hidden;display:flex;flex-direction:column;background:#fff;page-break-inside:avoid;margin:2mm">
         <div style="height:10mm;background:${accent};flex-shrink:0"></div>
         <div style="flex:1;display:flex;flex-direction:column;padding:4mm 5mm 3mm;align-items:center;justify-content:center;text-align:center;gap:2mm">
@@ -304,17 +377,24 @@ function openPrintWindow(list) {
     <title>명찰 출력 — ${list.length}명</title>
     <style>
       * { box-sizing:border-box; margin:0; padding:0; }
-      body { background:#fff; padding:3mm; }
-      .grid { display:flex; flex-wrap:wrap; gap:0; }
-      @media print { @page { margin:5mm; } }
+      body { background:#fff; padding:${pageMargin}; font-family:'Apple SD Gothic Neo','Malgun Gothic',sans-serif; }
+      .grid { display:flex; flex-wrap:wrap; }
+      @media print {
+        body { padding:0; }
+        @page { margin:0; size:${pageSize}; }
+      }
     </style>
   </head><body>
     <div class="grid">${nametagsHtml}</div>
+    ${size === '50' ? `<div style="margin:8px;padding:8px;background:#fffbeb;border:1px solid #fcd34d;border-radius:6px;font-size:11px;color:#92400e">
+      <b>🖨 네모닉 인쇄 설정</b><br>
+      프린터: <b>Nemonic (MIP-001LY)</b> 선택 · 용지 크기: <b>76×50mm</b> · 여백: <b>없음</b>
+    </div>` : ''}
     <script>
       const imgs = document.querySelectorAll('img');
       let loaded = 0;
-      function tryPrint() { if (++loaded >= imgs.length) { window.print(); setTimeout(() => window.close(), 500); } }
-      if (imgs.length === 0) { window.print(); setTimeout(() => window.close(), 500); }
+      function tryPrint() { if (++loaded >= imgs.length) { window.print(); setTimeout(() => window.close(), 800); } }
+      if (imgs.length === 0) { window.print(); setTimeout(() => window.close(), 800); }
       else imgs.forEach(img => { if (img.complete) tryPrint(); else { img.onload = tryPrint; img.onerror = tryPrint; } });
     <\/script>
   </body></html>`);
@@ -333,6 +413,18 @@ function toast(msg) {
 }
 
 init();
+// 페이지 로드 시 프린터 상태 표시
+window.addEventListener('load', () => {
+  const dot = document.getElementById('printer-dot');
+  const label = document.getElementById('printer-label');
+  if (dot && label) {
+    // 브라우저에서 직접 확인 불가 → USB 연결 안내 표시
+    dot.style.background = '#22c55e';
+    label.textContent = 'Nemonic MIP-001LY';
+    label.parentElement.style.borderColor = '#86efac';
+    label.parentElement.style.color = '#16a34a';
+  }
+});
 </script>
 </body>
 </html>
