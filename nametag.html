@@ -126,7 +126,7 @@ input[type=text]:focus { outline: none; border-color: var(--accent); }
 <div class="controls">
   <div class="control-group">
     <span class="control-label">명찰 크기</span>
-    <select id="size-select" onchange="renderGrid()">
+    <select id="size-select" onchange="onSizeChange()">
       <option value="50" selected>네모닉 76×50mm</option>
       <option value="76">실속형 76×76mm</option>
       <option value="95">고급형 95×120mm</option>
@@ -145,6 +145,53 @@ input[type=text]:focus { outline: none; border-color: var(--accent); }
     <input type="text" id="search-input" placeholder="이름·소속 검색" oninput="renderGrid()">
   </div>
   <div class="stat-pill"><span id="stat-selected">0</span>명 선택 / 전체 <span id="stat-total">0</span>명</div>
+</div>
+
+<!-- 디자인 편집 패널 (76×50mm 선택 시 표시) -->
+<div id="design-panel" style="display:none;background:#fff;border-bottom:1px solid var(--border);padding:12px 24px">
+  <div style="display:flex;align-items:center;gap:20px;flex-wrap:wrap">
+    <span style="font-size:12px;font-weight:600;color:var(--muted)">🎨 라벨 디자인</span>
+    <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer">
+      <input type="checkbox" id="d-bar" checked onchange="renderGrid()"> 색상 바
+    </label>
+    <label style="display:flex;align-items:center;gap:5px;font-size:12px">
+      높이
+      <input type="number" id="d-bar-h" value="4" min="2" max="8" step="0.5" onchange="renderGrid()"
+        style="width:52px;padding:3px 6px;border:1px solid var(--border);border-radius:5px;font-size:12px">mm
+    </label>
+    <div style="width:1px;height:20px;background:var(--border)"></div>
+    <label style="display:flex;align-items:center;gap:5px;font-size:12px">
+      QR크기
+      <input type="number" id="d-qr-size" value="32" min="20" max="42" step="1" onchange="renderGrid()"
+        style="width:52px;padding:3px 6px;border:1px solid var(--border);border-radius:5px;font-size:12px">mm
+    </label>
+    <label style="display:flex;align-items:center;gap:5px;font-size:12px">
+      QR여백
+      <input type="number" id="d-qr-margin" value="2" min="0" max="6" step="0.5" onchange="renderGrid()"
+        style="width:52px;padding:3px 6px;border:1px solid var(--border);border-radius:5px;font-size:12px">mm
+    </label>
+    <div style="width:1px;height:20px;background:var(--border)"></div>
+    <label style="display:flex;align-items:center;gap:5px;font-size:12px">
+      이름크기
+      <input type="number" id="d-name-pt" value="13" min="8" max="18" step="0.5" onchange="renderGrid()"
+        style="width:52px;padding:3px 6px;border:1px solid var(--border);border-radius:5px;font-size:12px">pt
+    </label>
+    <label style="display:flex;align-items:center;gap:5px;font-size:12px">
+      서브크기
+      <input type="number" id="d-sub-pt" value="8" min="5" max="12" step="0.5" onchange="renderGrid()"
+        style="width:52px;padding:3px 6px;border:1px solid var(--border);border-radius:5px;font-size:12px">pt
+    </label>
+    <label style="display:flex;align-items:center;gap:5px;font-size:12px">
+      여백
+      <input type="number" id="d-padding" value="2" min="1" max="5" step="0.5" onchange="renderGrid()"
+        style="width:52px;padding:3px 6px;border:1px solid var(--border);border-radius:5px;font-size:12px">mm
+    </label>
+    <div style="width:1px;height:20px;background:var(--border)"></div>
+    <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer">
+      <input type="checkbox" id="d-footer" onchange="renderGrid()"> 행사명 표시
+    </label>
+    <button onclick="resetDesign()" style="padding:4px 10px;border:1px solid var(--border);border-radius:6px;font-size:11px;background:none;cursor:pointer;color:var(--muted)">초기화</button>
+  </div>
 </div>
 
 <div id="grid-container">
@@ -219,6 +266,24 @@ function getFiltered() {
   });
 }
 
+function onSizeChange() {
+  const size = document.getElementById('size-select').value;
+  const panel = document.getElementById('design-panel');
+  if (panel) panel.style.display = size === '50' ? 'block' : 'none';
+  renderGrid();
+}
+
+function resetDesign() {
+  const defaults = { 'd-bar': true, 'd-bar-h': 4, 'd-qr-size': 32, 'd-qr-margin': 2, 'd-padding': 2, 'd-name-pt': 13, 'd-sub-pt': 8, 'd-footer': false };
+  Object.entries(defaults).forEach(([id, val]) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    if (el.type === 'checkbox') el.checked = val;
+    else el.value = val;
+  });
+  renderGrid();
+}
+
 function renderGrid() {
   const size = document.getElementById('size-select').value;
   const filtered = getFiltered();
@@ -243,18 +308,32 @@ function renderGrid() {
     const wrap = document.createElement('div');
     wrap.className = 'nametag-preview-wrap';
 
+    // 디자인 설정값 읽기 (미리보기용)
+    const dBar = document.getElementById('d-bar')?.checked ?? true;
+    const dBarH = parseFloat(document.getElementById('d-bar-h')?.value ?? 4);
+    const dQrSize = parseFloat(document.getElementById('d-qr-size')?.value ?? 32);
+    const dQrMargin = parseFloat(document.getElementById('d-qr-margin')?.value ?? 2);
+    const dPad = parseFloat(document.getElementById('d-padding')?.value ?? 2);
+    const dNamePt = parseFloat(document.getElementById('d-name-pt')?.value ?? 13);
+    const dSubPt = parseFloat(document.getElementById('d-sub-pt')?.value ?? 8);
+    const dFooter = document.getElementById('d-footer')?.checked ?? false;
+
     // 50mm는 가로형 레이아웃, 나머지는 기본 레이아웃
     const bodyHtml = size === '50' ? `
-      <div class="nametag-body" style="flex-direction:row;align-items:center;padding:8px 10px;gap:8px">
-        <div class="nametag-qr">
-          <img src="${qrUrl}" width="44" height="44" style="display:block;border-radius:3px" alt="QR">
+      ${dBar ? `<div class="nametag-header" style="background:${eventData?.color_primary || '#1a1a2e'};height:${dBarH * 1.5}px"></div>` : ''}
+      <div class="nametag-body" style="flex-direction:row;align-items:center;padding:${dPad * 2}px;gap:${dQrMargin * 2}px;flex:1">
+        <div class="nametag-qr" style="flex-shrink:0">
+          <img src="${qrUrl}" width="${dQrSize * 2.83}" height="${dQrSize * 2.83}" style="display:block;width:${dQrSize * 2.83}px;height:${dQrSize * 2.83}px" alt="QR">
         </div>
-        <div class="nametag-text">
-          <div class="nametag-name" style="font-size:13px">${r.name}</div>
-          ${r.organization ? `<div class="nametag-org" style="font-size:11px">${r.organization}</div>` : ''}
-          ${r.job_title ? `<div class="nametag-title-role" style="font-size:11px;font-weight:600">${r.job_title}</div>` : ''}
+        <div class="nametag-text" style="flex:1;min-width:0">
+          <div class="nametag-name" style="font-size:${dNamePt}px">${r.name}</div>
+          ${r.organization ? `<div class="nametag-org" style="font-size:${dSubPt}px">${r.organization}</div>` : ''}
+          ${r.department ? `<div class="nametag-org" style="font-size:${dSubPt}px">${r.department}</div>` : ''}
+          ${r.job_title ? `<div class="nametag-title-role" style="font-size:${dSubPt}px;font-weight:600">${r.job_title}</div>` : ''}
         </div>
-      </div>` : `
+      </div>
+      ${dFooter ? `<div style="text-align:center;font-size:9px;color:var(--muted);padding:2px 0;border-top:1px solid var(--border)">${eventData?.title || ''}</div>` : ''}
+    ` : `
       <div class="nametag-body">
         <div class="nametag-qr">
           <img src="${qrUrl}" width="${qrSize}" height="${qrSize}" style="display:block;border-radius:3px" alt="QR">
@@ -267,11 +346,11 @@ function renderGrid() {
       </div>`;
 
     wrap.innerHTML = `
-      <div class="nametag-preview${selected.has(r.id) ? ' selected' : ''}" id="prev-${r.id}" onclick="toggleSelect('${r.id}')">
+      <div class="nametag-preview${selected.has(r.id) ? ' selected' : ''}" id="prev-${r.id}" onclick="toggleSelect('${r.id}')" style="${size==='50'?'display:flex;flex-direction:column;':''}">
         <div class="select-check">✓</div>
-        <div class="nametag-header" style="background:${eventData?.color_primary || '#1a1a2e'}"></div>
+        ${size !== '50' ? `<div class="nametag-header" style="background:${eventData?.color_primary || '#1a1a2e'}"></div>` : ''}
         ${bodyHtml}
-        <div class="nametag-event">
+        <div class="nametag-event" style="${size==='50'?'margin-top:auto':''}">
           <span class="nametag-status${r.status==='pending'?' pending':''}">${r.status==='pending'?'승인대기':'확정'}</span>
           ${r.checked_in ? ' · ✓ 입장' : ''}
         </div>
@@ -321,26 +400,45 @@ function openPrintWindow(list) {
   const accent = eventData?.color_primary || '#1a1a2e';
   const title = eventData?.title || '';
 
-  // 페이지 크기 설정 (네모닉 76×50mm 전용)
+  // 디자인 설정값 읽기
+  const design = {
+    showBar: document.getElementById('d-bar')?.checked ?? true,
+    barHeight: parseFloat(document.getElementById('d-bar-h')?.value ?? 4),
+    qrSize: parseFloat(document.getElementById('d-qr-size')?.value ?? 32),
+    qrMargin: parseFloat(document.getElementById('d-qr-margin')?.value ?? 2),
+    padding: parseFloat(document.getElementById('d-padding')?.value ?? 2),
+    namePt: parseFloat(document.getElementById('d-name-pt')?.value ?? 13),
+    subPt: parseFloat(document.getElementById('d-sub-pt')?.value ?? 8),
+    showFooter: document.getElementById('d-footer')?.checked ?? false,
+  };
+
+  // 페이지 크기 설정
   const pageSize = size === '50' ? '76mm 50mm' : size === '95' ? '95mm 120mm' : '76mm 76mm';
-  const pageMargin = size === '50' ? '1mm' : '3mm';
 
   const nametagsHtml = list.map(r => {
     const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(r.qr_code)}`;
 
     if (size === '50') {
-      // 네모닉 76×50mm — 가로형 레이아웃
-      return `<div style="width:74mm;height:48mm;border:.5pt solid #ddd;border-radius:2mm;overflow:hidden;display:flex;flex-direction:column;background:#fff;page-break-after:always">
-        <div style="height:5mm;background:${accent};flex-shrink:0"></div>
-        <div style="flex:1;display:flex;gap:2mm;padding:2mm 3mm;align-items:center">
-          <img src="${qrUrl}" width="76" height="76" style="width:34mm;height:34mm;border:.5pt solid #eee;border-radius:1.5mm;flex-shrink:0">
-          <div style="flex:1;min-width:0;padding-left:1mm">
-            <div style="font-size:13pt;font-weight:700;line-height:1.2;word-break:break-all">${r.name}</div>
-            ${r.organization ? `<div style="font-size:8pt;color:#444;margin-top:1mm">${r.organization}${r.department ? '<br>'+r.department : ''}</div>` : ''}
-            ${r.job_title ? `<div style="font-size:9pt;font-weight:600;color:#222;margin-top:1.5mm">${r.job_title}</div>` : ''}
+      // 네모닉 76×50mm — 정밀 조정 레이아웃
+      const showAccentBar = design.showBar;
+      const qrMm = design.qrSize;
+      const namePt = design.namePt;
+      const subPt = design.subPt;
+      const showFooter = design.showFooter;
+      return `<div style="width:76mm;height:50mm;overflow:hidden;display:flex;flex-direction:column;background:#fff;page-break-after:always;page-break-inside:avoid">
+        ${showAccentBar ? `<div style="height:${design.barHeight}mm;background:${accent};flex-shrink:0"></div>` : ''}
+        <div style="flex:1;display:flex;gap:0;padding:${design.padding}mm;align-items:center;overflow:hidden">
+          <div style="flex-shrink:0;margin-right:${design.qrMargin}mm">
+            <img src="${qrUrl}" style="width:${qrMm}mm;height:${qrMm}mm;display:block">
+          </div>
+          <div style="flex:1;min-width:0;overflow:hidden">
+            <div style="font-size:${namePt}pt;font-weight:700;line-height:1.25;overflow:hidden">${r.name}</div>
+            ${r.organization ? `<div style="font-size:${subPt}pt;color:#333;margin-top:0.8mm;overflow:hidden">${r.organization}</div>` : ''}
+            ${r.department ? `<div style="font-size:${subPt}pt;color:#555;overflow:hidden">${r.department}</div>` : ''}
+            ${r.job_title ? `<div style="font-size:${subPt}pt;font-weight:600;color:#111;margin-top:1mm;overflow:hidden">${r.job_title}</div>` : ''}
           </div>
         </div>
-        <div style="height:5mm;border-top:.5pt solid #eee;display:flex;align-items:center;justify-content:center;font-size:6pt;color:#999;flex-shrink:0;letter-spacing:.3px">${title}</div>
+        ${showFooter ? `<div style="height:4mm;display:flex;align-items:center;justify-content:center;font-size:5.5pt;color:#bbb;flex-shrink:0;overflow:hidden">${title}</div>` : ''}
       </div>`;
     } else if (size === '95') {
       return `<div style="width:95mm;height:120mm;border:.5pt solid #ddd;border-radius:4mm;overflow:hidden;display:flex;flex-direction:column;background:#fff;page-break-inside:avoid;margin:2mm">
@@ -372,24 +470,21 @@ function openPrintWindow(list) {
   const win = window.open('', '_blank');
   if (!win) { toast('팝업이 차단됐습니다. 브라우저에서 팝업을 허용해주세요.'); return; }
 
+  // 인쇄 안내 텍스트 없이 명찰만 출력
   win.document.write(`<!DOCTYPE html><html><head>
     <meta charset="UTF-8">
     <title>명찰 출력 — ${list.length}명</title>
     <style>
       * { box-sizing:border-box; margin:0; padding:0; }
-      body { background:#fff; padding:${pageMargin}; font-family:'Apple SD Gothic Neo','Malgun Gothic',sans-serif; }
-      .grid { display:flex; flex-wrap:wrap; }
+      body { background:#fff; font-family:'Apple SD Gothic Neo','Malgun Gothic',sans-serif; }
+      @media screen { body { padding:4mm; } }
       @media print {
         body { padding:0; }
         @page { margin:0; size:${pageSize}; }
       }
     </style>
   </head><body>
-    <div class="grid">${nametagsHtml}</div>
-    ${size === '50' ? `<div style="margin:8px;padding:8px;background:#fffbeb;border:1px solid #fcd34d;border-radius:6px;font-size:11px;color:#92400e">
-      <b>🖨 네모닉 인쇄 설정</b><br>
-      프린터: <b>Nemonic (MIP-001LY)</b> 선택 · 용지 크기: <b>76×50mm</b> · 여백: <b>없음</b>
-    </div>` : ''}
+    ${nametagsHtml}
     <script>
       const imgs = document.querySelectorAll('img');
       let loaded = 0;
