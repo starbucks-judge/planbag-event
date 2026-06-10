@@ -197,7 +197,15 @@ function toggleAutoPrint() {
 
 async function printNametag(reg) {
   const accentColor = eventData?.color_primary || '#1a1a2e';
-  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(reg.qr_code)}`;
+  // QR 이미지를 먼저 fetch해서 blob URL로 변환 — 브라우저 차단 없이 즉시 print 가능
+  const qrApiUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(reg.qr_code)}`;
+  let qrSrc = qrApiUrl;
+  try {
+    const resp = await fetch(qrApiUrl);
+    const blob = await resp.blob();
+    qrSrc = URL.createObjectURL(blob);
+  } catch(e) { qrSrc = qrApiUrl; }
+
   const eventTitle = eventData?.title || '';
   const printArea = document.getElementById('nametag-print-area');
   if (!printArea) return;
@@ -207,7 +215,7 @@ async function printNametag(reg) {
       <div class="nt-95">
         <div class="nt-hdr" style="background:${accentColor}"></div>
         <div class="nt-body">
-          <div class="nt-qr"><img src="${qrUrl}" width="114" height="114"></div>
+          <div class="nt-qr"><img src="${qrSrc}" width="114" height="114"></div>
           <div class="nt-name">${reg.name}</div>
           ${reg.organization ? `<div class="nt-org">${reg.organization}${reg.department ? ' · ' + reg.department : ''}</div>` : ''}
           ${reg.job_title ? `<div class="nt-role">${reg.job_title}</div>` : ''}
@@ -219,7 +227,7 @@ async function printNametag(reg) {
       <div class="nt-76">
         <div class="nt-hdr" style="background:${accentColor}"></div>
         <div class="nt-body">
-          <div class="nt-qr"><img src="${qrUrl}" width="84" height="84"></div>
+          <div class="nt-qr"><img src="${qrSrc}" width="84" height="84"></div>
           <div class="nt-info">
             <div class="nt-name">${reg.name}</div>
             ${reg.organization ? `<div class="nt-org">${reg.organization}</div>` : ''}
@@ -230,20 +238,24 @@ async function printNametag(reg) {
       </div>`;
   }
 
-  // QR 이미지 로딩 후 인쇄
-  const img = printArea.querySelector('img');
-  if (img) {
-    await new Promise(resolve => {
-      if (img.complete) resolve();
-      else { img.onload = resolve; img.onerror = resolve; setTimeout(resolve, 2000); }
-    });
-  }
+  // blob URL이므로 이미 로딩 완료 — 바로 인쇄
   window.print();
+
+  // blob URL 해제
+  if (qrSrc.startsWith('blob:')) URL.revokeObjectURL(qrSrc);
 
   // 명찰 출력 로그 업데이트
   await sb.from('registrations')
     .update({ nametag_printed: true, nametag_printed_at: new Date().toISOString() })
     .eq('id', reg.id);
+
+  // USB 탭이면 인쇄 후 입력창 재포커스
+  if (currentTab === 'usb') {
+    setTimeout(() => {
+      const inp = document.getElementById('usb-input');
+      if (inp) inp.focus();
+    }, 500);
+  }
 }
 let scannerRunning = false;
 let html5Qr = null;
@@ -588,16 +600,12 @@ async function processCheckin(qrCode, source) {
   if (source === 'scan' || source === 'usb') {
     const printMsg = autoPrintEnabled ? ' · 명찰 출력 중...' : '';
     showScanResult('success', '✅', reg.name, (orgInfo || reg.email) + printMsg);
-    // 자동 출력 활성화 시 명찰 인쇄
-    if (autoPrintEnabled) {
-      setTimeout(() => printNametag(reg), 500);
-    }
+    // 자동 출력 — setTimeout 없이 즉시 실행 (팝업 차단 방지)
+    if (autoPrintEnabled) await printNametag(reg);
   } else {
     toast(`${reg.name} 체크인 완료!`, 'success');
     renderSearchTab(document.getElementById('search-input')?.value || '');
-    if (autoPrintEnabled) {
-      setTimeout(() => printNametag(reg), 300);
-    }
+    if (autoPrintEnabled) await printNametag(reg);
   }
 }
 
