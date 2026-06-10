@@ -162,7 +162,7 @@ input[type=text]:focus { outline: none; border-color: var(--accent); }
     <div style="width:1px;height:20px;background:var(--border)"></div>
     <label style="display:flex;align-items:center;gap:5px;font-size:12px">
       QR크기
-      <input type="number" id="d-qr-size" value="38" min="20" max="50" step="1" onchange="renderGrid()"
+      <input type="number" id="d-qr-size" value="30" min="15" max="44" step="1" onchange="renderGrid()"
         style="width:52px;padding:3px 6px;border:1px solid var(--border);border-radius:5px;font-size:12px">mm
     </label>
     <label style="display:flex;align-items:center;gap:5px;font-size:12px">
@@ -274,7 +274,7 @@ function onSizeChange() {
 }
 
 function resetDesign() {
-  const defaults = { 'd-bar': true, 'd-bar-h': 5, 'd-qr-size': 38, 'd-qr-margin': 2, 'd-padding': 2.5, 'd-name-pt': 14, 'd-sub-pt': 9, 'd-footer': false };
+  const defaults = { 'd-bar': true, 'd-bar-h': 5, 'd-qr-size': 30, 'd-qr-margin': 2, 'd-padding': 2.5, 'd-name-pt': 14, 'd-sub-pt': 9, 'd-footer': false };
   Object.entries(defaults).forEach(([id, val]) => {
     const el = document.getElementById(id);
     if (!el) return;
@@ -311,7 +311,7 @@ function renderGrid() {
     // 디자인 설정값 읽기 (미리보기용)
     const dBar = document.getElementById('d-bar')?.checked ?? true;
     const dBarH = parseFloat(document.getElementById('d-bar-h')?.value ?? 5);
-    const dQrSize = parseFloat(document.getElementById('d-qr-size')?.value ?? 38);
+    const dQrSize = parseFloat(document.getElementById('d-qr-size')?.value ?? 30);
     const dQrMargin = parseFloat(document.getElementById('d-qr-margin')?.value ?? 2);
     const dPad = parseFloat(document.getElementById('d-padding')?.value ?? 2.5);
     const dNamePt = parseFloat(document.getElementById('d-name-pt')?.value ?? 14);
@@ -404,7 +404,7 @@ function openPrintWindow(list) {
   const design = {
     showBar: document.getElementById('d-bar')?.checked ?? true,
     barHeight: parseFloat(document.getElementById('d-bar-h')?.value ?? 5),
-    qrSize: parseFloat(document.getElementById('d-qr-size')?.value ?? 38),
+    qrSize: parseFloat(document.getElementById('d-qr-size')?.value ?? 30),
     qrMargin: parseFloat(document.getElementById('d-qr-margin')?.value ?? 2),
     padding: parseFloat(document.getElementById('d-padding')?.value ?? 2.5),
     namePt: parseFloat(document.getElementById('d-name-pt')?.value ?? 14),
@@ -413,32 +413,34 @@ function openPrintWindow(list) {
   };
 
   // 페이지 크기 설정
-  const pageSize = size === '50' ? '80mm 56mm' : size === '95' ? '95mm 120mm' : '76mm 76mm';
+  const pageSize = size === '50' ? '80mm 56mm landscape' : size === '95' ? '95mm 120mm portrait' : '76mm 76mm portrait';
 
   const nametagsHtml = list.map(r => {
     const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(r.qr_code)}`;
 
     if (size === '50') {
-      // 네모닉 76×50mm — 정밀 조정 레이아웃
       const showAccentBar = design.showBar;
-      const qrMm = design.qrSize;
+      const qrMm = Math.min(design.qrSize, 44); // 최대 44mm로 제한 (56mm 높이에서 여백 감안)
       const namePt = design.namePt;
       const subPt = design.subPt;
       const showFooter = design.showFooter;
-      return `<div style="width:80mm;height:56mm;overflow:hidden;display:flex;flex-direction:column;background:#fff;page-break-after:always;page-break-inside:avoid">
-        ${showAccentBar ? `<div style="height:${design.barHeight}mm;background:${accent};flex-shrink:0"></div>` : ''}
-        <div style="flex:1;display:flex;gap:0;padding:${design.padding}mm;align-items:center;overflow:hidden">
-          <div style="flex-shrink:0;margin-right:${design.qrMargin}mm">
-            <img src="${qrUrl}" style="width:${qrMm}mm;height:${qrMm}mm;display:block">
+      const barH = design.barHeight;
+      const pad = design.padding;
+      const qrGap = design.qrMargin;
+      return `<div style="width:80mm;height:56mm;overflow:hidden;display:flex;flex-direction:column;background:#fff;page-break-after:always;page-break-inside:avoid;box-sizing:border-box">
+        ${showAccentBar ? `<div style="height:${barH}mm;background:${accent};flex-shrink:0;width:100%"></div>` : ''}
+        <div style="flex:1;display:flex;flex-direction:row;align-items:center;padding:${pad}mm;gap:${qrGap}mm;overflow:hidden;box-sizing:border-box">
+          <div style="flex-shrink:0;width:${qrMm}mm;height:${qrMm}mm">
+            <img src="${qrUrl}" style="width:${qrMm}mm;height:${qrMm}mm;display:block;image-rendering:pixelated">
           </div>
           <div style="flex:1;min-width:0;overflow:hidden">
-            <div style="font-size:${namePt}pt;font-weight:700;line-height:1.25;overflow:hidden">${r.name}</div>
-            ${r.organization ? `<div style="font-size:${subPt}pt;color:#333;margin-top:0.8mm;overflow:hidden">${r.organization}</div>` : ''}
-            ${r.department ? `<div style="font-size:${subPt}pt;color:#555;overflow:hidden">${r.department}</div>` : ''}
-            ${r.job_title ? `<div style="font-size:${subPt}pt;font-weight:600;color:#111;margin-top:1mm;overflow:hidden">${r.job_title}</div>` : ''}
+            <div style="font-size:${namePt}pt;font-weight:700;line-height:1.2;word-break:keep-all;overflow:hidden">${r.name}</div>
+            ${r.organization ? `<div style="font-size:${subPt}pt;color:#333;margin-top:0.5mm;line-height:1.3;overflow:hidden">${r.organization}</div>` : ''}
+            ${r.department ? `<div style="font-size:${subPt}pt;color:#555;line-height:1.3;overflow:hidden">${r.department}</div>` : ''}
+            ${r.job_title ? `<div style="font-size:${subPt}pt;font-weight:600;color:#111;margin-top:0.8mm;overflow:hidden">${r.job_title}</div>` : ''}
           </div>
         </div>
-        ${showFooter ? `<div style="height:4mm;display:flex;align-items:center;justify-content:center;font-size:5.5pt;color:#bbb;flex-shrink:0;overflow:hidden">${title}</div>` : ''}
+        ${showFooter ? `<div style="height:4mm;display:flex;align-items:center;justify-content:center;font-size:5pt;color:#aaa;flex-shrink:0;overflow:hidden;letter-spacing:.2px">${title}</div>` : ''}
       </div>`;
     } else if (size === '95') {
       return `<div style="width:95mm;height:120mm;border:.5pt solid #ddd;border-radius:4mm;overflow:hidden;display:flex;flex-direction:column;background:#fff;page-break-inside:avoid;margin:2mm">
@@ -479,8 +481,9 @@ function openPrintWindow(list) {
       body { background:#fff; font-family:'Apple SD Gothic Neo','Malgun Gothic',sans-serif; }
       @media screen { body { padding:4mm; } }
       @media print {
-        body { padding:0; }
+        body { padding:0; margin:0; }
         @page { margin:0; size:${pageSize}; }
+        * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
       }
     </style>
   </head><body>
