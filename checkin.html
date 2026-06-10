@@ -125,6 +125,39 @@ body { font-family: 'Pretendard', 'Apple SD Gothic Neo', sans-serif; background:
 .usb-guide-num { width: 18px; height: 18px; border-radius: 50%; background: var(--border); color: var(--text); font-size: 10px; font-weight: 600; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 1px; }
 .usb-result { margin-top: 14px; }
 
+.toggle-wrap { cursor:pointer; }
+.toggle-track { width:40px; height:22px; border-radius:11px; background:var(--border); position:relative; transition:background .2s; }
+.toggle-track.on { background:#22c55e; }
+.toggle-track::after { content:''; position:absolute; width:18px; height:18px; border-radius:50%; background:#fff; top:2px; left:2px; transition:transform .2s; }
+.toggle-track.on::after { transform:translateX(18px); }
+
+/* 명찰 프린트 숨김 영역 */
+#nametag-print-area { display:none; }
+@media print {
+  body > *:not(#nametag-print-area) { display:none !important; }
+  #nametag-print-area { display:block !important; }
+  @page { margin:8mm; size:A4; }
+}
+/* 명찰 76x76 */
+.nt-76 { width:76mm; height:76mm; border:0.5pt solid #ddd; border-radius:3mm; overflow:hidden; display:flex; flex-direction:column; background:#fff; page-break-inside:avoid; }
+.nt-76 .nt-hdr { height:7mm; flex-shrink:0; }
+.nt-76 .nt-body { flex:1; display:flex; gap:3mm; padding:3mm; align-items:center; }
+.nt-76 .nt-qr img { width:22mm; height:22mm; border:0.5pt solid #eee; border-radius:2mm; }
+.nt-76 .nt-info { flex:1; min-width:0; }
+.nt-76 .nt-name { font-size:14pt; font-weight:700; line-height:1.2; word-break:break-all; }
+.nt-76 .nt-org { font-size:8pt; color:#666; margin-top:1mm; }
+.nt-76 .nt-role { font-size:9pt; font-weight:600; margin-top:1mm; }
+.nt-76 .nt-ftr { height:6mm; border-top:0.5pt solid #eee; display:flex; align-items:center; justify-content:center; flex-shrink:0; font-size:7pt; color:#999; }
+/* 명찰 95x120 */
+.nt-95 { width:95mm; height:120mm; border:0.5pt solid #ddd; border-radius:4mm; overflow:hidden; display:flex; flex-direction:column; background:#fff; page-break-inside:avoid; }
+.nt-95 .nt-hdr { height:10mm; flex-shrink:0; }
+.nt-95 .nt-body { flex:1; display:flex; flex-direction:column; padding:4mm 5mm 3mm; align-items:center; justify-content:center; text-align:center; gap:2mm; }
+.nt-95 .nt-qr img { width:30mm; height:30mm; }
+.nt-95 .nt-name { font-size:18pt; font-weight:700; line-height:1.2; }
+.nt-95 .nt-org { font-size:10pt; color:#444; }
+.nt-95 .nt-role { font-size:11pt; font-weight:600; background:#f0f0f0; padding:1mm 3mm; border-radius:3mm; }
+.nt-95 .nt-ftr { height:8mm; border-top:0.5pt solid #eee; display:flex; align-items:center; justify-content:center; flex-shrink:0; font-size:8pt; color:#999; }
+
 .toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%) translateY(10px); background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 12px 20px; font-size: 13px; font-weight: 500; z-index: 1000; opacity: 0; transition: all .25s; white-space: nowrap; box-shadow: 0 8px 24px rgba(0,0,0,.4); }
 .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 .toast.success { border-color: rgba(34,197,94,.5); color: var(--success); }
@@ -145,6 +178,73 @@ const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 const eventId = new URLSearchParams(location.search).get('id');
 let eventData = null;
 let allRegistrations = [];
+let autoPrintEnabled = false;
+let namedtagSize = '76'; // '76' or '95'
+
+function toggleAutoPrint() {
+  autoPrintEnabled = !autoPrintEnabled;
+  const track = document.getElementById('toggle-track');
+  const label = document.getElementById('toggle-label');
+  if (track) track.classList.toggle('on', autoPrintEnabled);
+  if (label) label.textContent = autoPrintEnabled ? '명찰 자동출력 ON' : '명찰 자동출력 OFF';
+  if (autoPrintEnabled) {
+    // 사이즈 선택 팝업
+    const size = confirm('명찰 사이즈 선택\n\n확인 → 고급형 95×120mm\n취소 → 실속형 76×76mm');
+    namedtagSize = size ? '95' : '76';
+    toast(`자동출력 ON (${namedtagSize === '95' ? '고급형 95×120' : '실속형 76×76'}mm)`, 'success');
+  }
+}
+
+async function printNametag(reg) {
+  const accentColor = eventData?.color_primary || '#1a1a2e';
+  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(reg.qr_code)}`;
+  const eventTitle = eventData?.title || '';
+  const printArea = document.getElementById('nametag-print-area');
+  if (!printArea) return;
+
+  if (namedtagSize === '95') {
+    printArea.innerHTML = `
+      <div class="nt-95">
+        <div class="nt-hdr" style="background:${accentColor}"></div>
+        <div class="nt-body">
+          <div class="nt-qr"><img src="${qrUrl}" width="114" height="114"></div>
+          <div class="nt-name">${reg.name}</div>
+          ${reg.organization ? `<div class="nt-org">${reg.organization}${reg.department ? ' · ' + reg.department : ''}</div>` : ''}
+          ${reg.job_title ? `<div class="nt-role">${reg.job_title}</div>` : ''}
+        </div>
+        <div class="nt-ftr">${eventTitle}</div>
+      </div>`;
+  } else {
+    printArea.innerHTML = `
+      <div class="nt-76">
+        <div class="nt-hdr" style="background:${accentColor}"></div>
+        <div class="nt-body">
+          <div class="nt-qr"><img src="${qrUrl}" width="84" height="84"></div>
+          <div class="nt-info">
+            <div class="nt-name">${reg.name}</div>
+            ${reg.organization ? `<div class="nt-org">${reg.organization}</div>` : ''}
+            ${reg.job_title ? `<div class="nt-role">${reg.job_title}</div>` : ''}
+          </div>
+        </div>
+        <div class="nt-ftr">${eventTitle}</div>
+      </div>`;
+  }
+
+  // QR 이미지 로딩 후 인쇄
+  const img = printArea.querySelector('img');
+  if (img) {
+    await new Promise(resolve => {
+      if (img.complete) resolve();
+      else { img.onload = resolve; img.onerror = resolve; setTimeout(resolve, 2000); }
+    });
+  }
+  window.print();
+
+  // 명찰 출력 로그 업데이트
+  await sb.from('registrations')
+    .update({ nametag_printed: true, nametag_printed_at: new Date().toISOString() })
+    .eq('id', reg.id);
+}
 let scannerRunning = false;
 let html5Qr = null;
 let lastScanTime = 0;
@@ -175,6 +275,14 @@ function renderShell() {
       <div class="header-info">
         <div class="header-title">${eventData.title}</div>
         <div class="header-sub">체크인 운영</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);cursor:pointer;user-select:none">
+          <div class="toggle-wrap" onclick="toggleAutoPrint()">
+            <div class="toggle-track" id="toggle-track"></div>
+          </div>
+          <span id="toggle-label">명찰 자동출력 OFF</span>
+        </label>
       </div>
       <div class="header-counts">
         <div class="n" id="stat-checkin">${stats.checkin}</div>
@@ -221,7 +329,10 @@ function renderUSBTab() {
             placeholder="QR 스캐너로 스캔하거나 직접 입력 후 Enter"
             autocomplete="off"
             autocorrect="off"
+            autocapitalize="off"
             spellcheck="false"
+            inputmode="url"
+            lang="en"
           >
           <span class="usb-input-icon">⌨️</span>
         </div>
@@ -258,12 +369,19 @@ function renderUSBTab() {
 
     input.focus();
 
-    // 포커스 상태 표시
+    // 포커스 상태 표시 + 한글 IME 강제 비활성화
     input.addEventListener('focus', () => {
       const dot = document.getElementById('usb-dot');
       const txt = document.getElementById('usb-status-text');
       if (dot) dot.classList.remove('inactive');
       if (txt) txt.textContent = '✅ 스캐너 준비 완료 — QR코드를 스캔하세요';
+      // 한글 입력모드 강제 영문 전환
+      try {
+        if (navigator.language.startsWith('ko')) {
+          input.setAttribute('lang', 'en');
+          input.style.imeMode = 'disabled';
+        }
+      } catch(e) {}
     });
 
     input.addEventListener('blur', () => {
@@ -276,8 +394,10 @@ function renderUSBTab() {
     // Enter 또는 스캐너 자동 완료 감지
     input.addEventListener('keydown', async (e) => {
       if (e.key === 'Enter') {
-        const code = input.value.trim();
-        if (!code) return;
+        // 한글 필터링 후 처리
+        const raw = input.value.trim();
+        const code = raw.replace(/[ㄱ-ㅎㅏ-ㅣ가-힣]/g, '').toUpperCase().trim();
+        if (!code) { input.value = ''; return; }
         input.value = '';
         input.focus();
         await processCheckin(code, 'usb');
@@ -289,7 +409,11 @@ function renderUSBTab() {
     let inputTimer = null;
     input.addEventListener('input', () => {
       clearTimeout(inputTimer);
-      const val = input.value.trim();
+      // 한글 문자 실시간 필터링 — 한글이 섞여 들어온 경우 영문/숫자/하이픈만 남김
+      const raw = input.value;
+      const filtered = raw.replace(/[ㄱ-ㅎㅏ-ㅣ가-힣]/g, '').toUpperCase();
+      if (raw !== filtered) input.value = filtered;
+      const val = filtered.trim();
       if (val.length >= 10) { // QR코드 최소 길이 이상
         inputTimer = setTimeout(async () => {
           const code = input.value.trim();
@@ -462,10 +586,18 @@ async function processCheckin(qrCode, source) {
 
   const orgInfo = [reg.organization, reg.job_title].filter(Boolean).join(' · ');
   if (source === 'scan' || source === 'usb') {
-    showScanResult('success', '✅', reg.name, orgInfo || reg.email);
+    const printMsg = autoPrintEnabled ? ' · 명찰 출력 중...' : '';
+    showScanResult('success', '✅', reg.name, (orgInfo || reg.email) + printMsg);
+    // 자동 출력 활성화 시 명찰 인쇄
+    if (autoPrintEnabled) {
+      setTimeout(() => printNametag(reg), 500);
+    }
   } else {
     toast(`${reg.name} 체크인 완료!`, 'success');
     renderSearchTab(document.getElementById('search-input')?.value || '');
+    if (autoPrintEnabled) {
+      setTimeout(() => printNametag(reg), 300);
+    }
   }
 }
 
@@ -512,5 +644,6 @@ function toast(msg, type = 'info') {
 
 init();
 </script>
+<div id="nametag-print-area"></div>
 </body>
 </html>
