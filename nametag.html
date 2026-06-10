@@ -127,7 +127,7 @@ input[type=text]:focus { outline: none; border-color: var(--accent); }
   <div class="control-group">
     <span class="control-label">명찰 크기</span>
     <select id="size-select" onchange="onSizeChange()">
-      <option value="50" selected>네모닉 76×50mm</option>
+      <option value="50" selected>네모닉 80×56mm</option>
       <option value="76">실속형 76×76mm</option>
       <option value="95">고급형 95×120mm</option>
     </select>
@@ -156,13 +156,13 @@ input[type=text]:focus { outline: none; border-color: var(--accent); }
     </label>
     <label style="display:flex;align-items:center;gap:5px;font-size:12px">
       높이
-      <input type="number" id="d-bar-h" value="4" min="2" max="8" step="0.5" onchange="renderGrid()"
+      <input type="number" id="d-bar-h" value="5" min="2" max="8" step="0.5" onchange="renderGrid()"
         style="width:52px;padding:3px 6px;border:1px solid var(--border);border-radius:5px;font-size:12px">mm
     </label>
     <div style="width:1px;height:20px;background:var(--border)"></div>
     <label style="display:flex;align-items:center;gap:5px;font-size:12px">
       QR크기
-      <input type="number" id="d-qr-size" value="32" min="20" max="42" step="1" onchange="renderGrid()"
+      <input type="number" id="d-qr-size" value="38" min="20" max="50" step="1" onchange="renderGrid()"
         style="width:52px;padding:3px 6px;border:1px solid var(--border);border-radius:5px;font-size:12px">mm
     </label>
     <label style="display:flex;align-items:center;gap:5px;font-size:12px">
@@ -173,17 +173,17 @@ input[type=text]:focus { outline: none; border-color: var(--accent); }
     <div style="width:1px;height:20px;background:var(--border)"></div>
     <label style="display:flex;align-items:center;gap:5px;font-size:12px">
       이름크기
-      <input type="number" id="d-name-pt" value="13" min="8" max="18" step="0.5" onchange="renderGrid()"
+      <input type="number" id="d-name-pt" value="14" min="8" max="18" step="0.5" onchange="renderGrid()"
         style="width:52px;padding:3px 6px;border:1px solid var(--border);border-radius:5px;font-size:12px">pt
     </label>
     <label style="display:flex;align-items:center;gap:5px;font-size:12px">
       서브크기
-      <input type="number" id="d-sub-pt" value="8" min="5" max="12" step="0.5" onchange="renderGrid()"
+      <input type="number" id="d-sub-pt" value="9" min="5" max="12" step="0.5" onchange="renderGrid()"
         style="width:52px;padding:3px 6px;border:1px solid var(--border);border-radius:5px;font-size:12px">pt
     </label>
     <label style="display:flex;align-items:center;gap:5px;font-size:12px">
       여백
-      <input type="number" id="d-padding" value="2" min="1" max="5" step="0.5" onchange="renderGrid()"
+      <input type="number" id="d-padding" value="2.5" min="1" max="5" step="0.5" onchange="renderGrid()"
         style="width:52px;padding:3px 6px;border:1px solid var(--border);border-radius:5px;font-size:12px">mm
     </label>
     <div style="width:1px;height:20px;background:var(--border)"></div>
@@ -274,7 +274,7 @@ function onSizeChange() {
 }
 
 function resetDesign() {
-  const defaults = { 'd-bar': true, 'd-bar-h': 4, 'd-qr-size': 32, 'd-qr-margin': 2, 'd-padding': 2, 'd-name-pt': 13, 'd-sub-pt': 8, 'd-footer': false };
+  const defaults = { 'd-bar': true, 'd-bar-h': 5, 'd-qr-size': 38, 'd-qr-margin': 2, 'd-padding': 2.5, 'd-name-pt': 14, 'd-sub-pt': 9, 'd-footer': false };
   Object.entries(defaults).forEach(([id, val]) => {
     const el = document.getElementById(id);
     if (!el) return;
@@ -310,12 +310,12 @@ function renderGrid() {
 
     // 디자인 설정값 읽기 (미리보기용)
     const dBar = document.getElementById('d-bar')?.checked ?? true;
-    const dBarH = parseFloat(document.getElementById('d-bar-h')?.value ?? 4);
-    const dQrSize = parseFloat(document.getElementById('d-qr-size')?.value ?? 32);
+    const dBarH = parseFloat(document.getElementById('d-bar-h')?.value ?? 5);
+    const dQrSize = parseFloat(document.getElementById('d-qr-size')?.value ?? 38);
     const dQrMargin = parseFloat(document.getElementById('d-qr-margin')?.value ?? 2);
-    const dPad = parseFloat(document.getElementById('d-padding')?.value ?? 2);
-    const dNamePt = parseFloat(document.getElementById('d-name-pt')?.value ?? 13);
-    const dSubPt = parseFloat(document.getElementById('d-sub-pt')?.value ?? 8);
+    const dPad = parseFloat(document.getElementById('d-padding')?.value ?? 2.5);
+    const dNamePt = parseFloat(document.getElementById('d-name-pt')?.value ?? 14);
+    const dSubPt = parseFloat(document.getElementById('d-sub-pt')?.value ?? 9);
     const dFooter = document.getElementById('d-footer')?.checked ?? false;
 
     // 50mm는 가로형 레이아웃, 나머지는 기본 레이아웃
@@ -403,17 +403,17 @@ function openPrintWindow(list) {
   // 디자인 설정값 읽기
   const design = {
     showBar: document.getElementById('d-bar')?.checked ?? true,
-    barHeight: parseFloat(document.getElementById('d-bar-h')?.value ?? 4),
-    qrSize: parseFloat(document.getElementById('d-qr-size')?.value ?? 32),
+    barHeight: parseFloat(document.getElementById('d-bar-h')?.value ?? 5),
+    qrSize: parseFloat(document.getElementById('d-qr-size')?.value ?? 38),
     qrMargin: parseFloat(document.getElementById('d-qr-margin')?.value ?? 2),
-    padding: parseFloat(document.getElementById('d-padding')?.value ?? 2),
-    namePt: parseFloat(document.getElementById('d-name-pt')?.value ?? 13),
-    subPt: parseFloat(document.getElementById('d-sub-pt')?.value ?? 8),
+    padding: parseFloat(document.getElementById('d-padding')?.value ?? 2.5),
+    namePt: parseFloat(document.getElementById('d-name-pt')?.value ?? 14),
+    subPt: parseFloat(document.getElementById('d-sub-pt')?.value ?? 9),
     showFooter: document.getElementById('d-footer')?.checked ?? false,
   };
 
   // 페이지 크기 설정
-  const pageSize = size === '50' ? '76mm 50mm' : size === '95' ? '95mm 120mm' : '76mm 76mm';
+  const pageSize = size === '50' ? '80mm 56mm' : size === '95' ? '95mm 120mm' : '76mm 76mm';
 
   const nametagsHtml = list.map(r => {
     const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(r.qr_code)}`;
@@ -425,7 +425,7 @@ function openPrintWindow(list) {
       const namePt = design.namePt;
       const subPt = design.subPt;
       const showFooter = design.showFooter;
-      return `<div style="width:76mm;height:50mm;overflow:hidden;display:flex;flex-direction:column;background:#fff;page-break-after:always;page-break-inside:avoid">
+      return `<div style="width:80mm;height:56mm;overflow:hidden;display:flex;flex-direction:column;background:#fff;page-break-after:always;page-break-inside:avoid">
         ${showAccentBar ? `<div style="height:${design.barHeight}mm;background:${accent};flex-shrink:0"></div>` : ''}
         <div style="flex:1;display:flex;gap:0;padding:${design.padding}mm;align-items:center;overflow:hidden">
           <div style="flex-shrink:0;margin-right:${design.qrMargin}mm">
